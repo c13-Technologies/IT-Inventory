@@ -1,0 +1,687 @@
+// =============================================================================
+// IT Asset Inventory — Prisma schema
+// =============================================================================
+//
+// Source of truth: docs/erd.md (Mermaid ERD). When changing this file,
+// update the ERD too — it is the visual contract.
+//
+// Conventions baked in:
+//   - cuid() primary keys
+//   - Every tenant-scoped table has tenantId + tenant-level composite indexes
+//   - Every mutable entity has `version Int @default(0)` for optimistic locking
+//   - Every table has createdAt + (updatedAt where mutable)
+//   - Money: Decimal(12,2) with a currency snapshot column
+//   - JSONB (`Json`): tenants.settings, assets.attributes, approval.payload,
+//     audit before/after, email.data, webhook.events (array as String[])
+//   - ON DELETE RESTRICT by default; CASCADE only for owned children;
+//     SET NULL for optional references
+//   - Enum values are SCREAMING_SNAKE in Prisma, snake_case in the DB
+//     (via @map) to match the ERD
+//   - Soft delete via status enums (no `deleted_at` columns)
+//
+// Open question (see docs/erd.md §7): the AssetAttribute table duplicates
+// assets.attributes JSONB. Kept for now per the ERD; recommendation is to
+// drop it once the JSONB path is validated.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS  (DB names are snake_case via @map)
+// =============================================================================
+
+enum AssetStatus {
+  IN_STOCK  @map("in_stock")
+  ASSIGNED  @map("assigned")
+  IN_REPAIR @map("in_repair")
+  RETIRED   @map("retired")
+  LOST      @map("lost")
+}
+
+enum CategoryType {
+  HARDWARE   @map("hardware")
+  SOFTWARE   @map("software")
+  PERIPHERAL @map("peripheral")
+  ACCESSORY  @map("accessory")
+}
+
+enum LocationType {
+  OFFICE      @map("office")
+  BUILDING    @map("building")
+  ROOM        @map("room")
+  DATA_CENTER @map("data_center")
+  REMOTE      @map("remote")
+}
+
+enum MaintenanceType {
+  REPAIR         @map("repair")
+  UPGRADE        @map("upgrade")
+  INSPECTION     @map("inspection")
+  WARRANTY_CLAIM @map("warranty_claim")
+}
+
+enum MaintenanceStatus {
+  OPEN        @map("open")
+  IN_PROGRESS @map("in_progress")
+  CLOSED      @map("closed")
+}
+
+enum UserStatus {
+  ACTIVE   @map("active")
+  DISABLED @map("disabled")
+  PENDING  @map("pending")
+}
+
+enum TenantStatus {
+  ACTIVE    @map("active")
+  SUSPENDED @map("suspended")
+  TRIAL     @map("trial")
+}
+
+enum TenantPlan {
+  FREE       @map("free")
+  PRO        @map("pro")
+  ENTERPRISE @map("enterprise")
+}
+
+enum VendorStatus {
+  ACTIVE   @map("active")
+  INACTIVE @map("inactive")
+}
+
+enum ApprovalType {
+  ASSET_ASSIGN @map("asset_assign")
+  ASSET_RETIRE @map("asset_retire")
+  ASSET_DELETE @map("asset_delete")
+  USER_DISABLE @map("user_disable")
+}
+
+enum ApprovalStatus {
+  PENDING   @map("pending")
+  APPROVED  @map("approved")
+  REJECTED  @map("rejected")
+  CANCELLED @map("cancelled")
+}
+
+enum NotificationType {
+  APPROVAL_PENDING  @map("approval_pending")
+  APPROVAL_APPROVED @map("approval_approved")
+  APPROVAL_REJECTED @map("approval_rejected")
+  ASSET_ASSIGNED    @map("asset_assigned")
+  ASSET_RETURNED    @map("asset_returned")
+  ASSET_RETIRED     @map("asset_retired")
+  WARRANTY_EXPIRING @map("warranty_expiring")
+  LICENSE_EXPIRING  @map("license_expiring")
+  PASSWORD_RESET    @map("password_reset")
+}
+
+enum EmailJobStatus {
+  QUEUED  @map("queued")
+  SENDING @map("sending")
+  SENT    @map("sent")
+  FAILED  @map("failed")
+}
+
+enum WebhookChannel {
+  SLACK @map("slack")
+  TEAMS @map("teams")
+}
+
+// =============================================================================
+// MODELS  (22 in total, ordered by dependency)
+// =============================================================================
+
+// -------- 1. Tenant (root) ----------------------------------------------------
+
+model Tenant {
+  id                    String       @id @default(cuid())
+  slug                  String       @unique
+  name                  String
+  status                TenantStatus @default(ACTIVE)
+  plan                  TenantPlan   @default(FREE)
+  defaultCurrency       String       @default("USD") @map("default_currency")
+  defaultWarrantyMonths Int          @default(36) @map("default_warranty_months")
+  settings              Json         @default("{}")
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+  version               Int          @default(0)
+
+  users                User[]
+  roles                Role[]
+  departments          Department[]
+  locations            Location[]
+  categories           Category[]
+  vendors              Vendor[]
+  assets               Asset[]
+  assignments          Assignment[]
+  softwareLicenses     SoftwareLicense[]
+  licenseSeats         LicenseSeat[]
+  maintenanceRecords   MaintenanceRecord[]
+  approvalRequests     ApprovalRequest[]
+  notifications        Notification[]
+  emailJobs            EmailJob[]
+  webhookSubscriptions WebhookSubscription[]
+  auditLog             AuditLog[]
+
+  @@map("tenants")
+}
+
+// -------- 2. Department -------------------------------------------------------
+
+model Department {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  name      String
+  code      String
+  headId    String?  @map("head_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  version   Int      @default(0)
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  head    User?  @relation("DepartmentHead", fields: [headId], references: [id], onDelete: SetNull)
+  members User[] @relation("DepartmentMembers")
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([headId])
+  @@map("departments")
+}
+
+// -------- 3. Location (self-referential hierarchy) ---------------------------
+
+model Location {
+  id        String       @id @default(cuid())
+  tenantId  String       @map("tenant_id")
+  name      String
+  type      LocationType
+  parentId  String?      @map("parent_id")
+  address   String?      @db.Text
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  version   Int          @default(0)
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent   Location?  @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Location[] @relation("LocationHierarchy")
+  assets   Asset[]
+
+  @@index([tenantId, type])
+  @@index([tenantId, parentId])
+  @@map("locations")
+}
+
+// -------- 4. Role (built-in rows have tenantId = NULL) -----------------------
+
+model Role {
+  id          String   @id @default(cuid())
+  tenantId    String?  @map("tenant_id")
+  name        String
+  description String?  @db.Text
+  isBuiltin   Boolean  @default(false) @map("is_builtin")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  version     Int      @default(0)
+
+  tenant          Tenant?          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("roles")
+}
+
+// -------- 5. Permission (global, not tenant-scoped) --------------------------
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+// -------- 6. RolePermission (M:N junction) -----------------------------------
+
+model RolePermission {
+  roleId       String   @map("role_id")
+  permissionId String   @map("permission_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+// -------- 7. User -------------------------------------------------------------
+
+model User {
+  id           String     @id @default(cuid())
+  tenantId     String     @map("tenant_id")
+  email        String
+  passwordHash String     @map("password_hash")
+  fullName     String     @map("full_name")
+  phone        String?
+  avatarUrl    String?    @map("avatar_url")
+  roleId       String     @map("role_id")
+  departmentId String?    @map("department_id")
+  status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?  @map("last_login_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  version      Int        @default(0)
+
+  tenant                   Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  role                     Role                  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  department               Department?           @relation("DepartmentMembers", fields: [departmentId], references: [id], onDelete: SetNull)
+  headedDepartments        Department[]          @relation("DepartmentHead")
+  assignmentsAsAssignee    Assignment[]          @relation("AssignmentAssignee")
+  assignmentsAsAssigner    Assignment[]          @relation("AssignmentAssigner")
+  licenseSeats             LicenseSeat[]
+  maintenanceAsPerformer   MaintenanceRecord[]   @relation("MaintenancePerformer")
+  approvalRequestsMade     ApprovalRequest[]     @relation("ApprovalRequester")
+  approvalRequestsApproved ApprovalRequest[]     @relation("ApprovalApprover")
+  notifications            Notification[]
+  passwordResetTokens      PasswordResetToken[]
+  createdAssets            Asset[]               @relation("AssetCreatedBy")
+  uploadedPhotos           AssetPhoto[]
+  createdWebhooks          WebhookSubscription[] @relation("WebhookCreatedBy")
+  auditLog                 AuditLog[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, status])
+  @@index([tenantId, roleId])
+  @@index([departmentId])
+  @@map("users")
+}
+
+// -------- 8. PasswordResetToken ----------------------------------------------
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// -------- 9. Category (self-referential hierarchy) ---------------------------
+
+model Category {
+  id          String       @id @default(cuid())
+  tenantId    String       @map("tenant_id")
+  name        String
+  type        CategoryType
+  parentId    String?      @map("parent_id")
+  description String?      @db.Text
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  version     Int          @default(0)
+
+  tenant   Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryHierarchy")
+  assets   Asset[]
+
+  @@unique([tenantId, name, parentId])
+  @@index([tenantId, type])
+  @@index([tenantId, parentId])
+  @@map("categories")
+}
+
+// -------- 10. Vendor ---------------------------------------------------------
+
+model Vendor {
+  id            String       @id @default(cuid())
+  tenantId      String       @map("tenant_id")
+  name          String
+  contactPerson String?      @map("contact_person")
+  email         String?
+  phone         String?
+  address       String?      @db.Text
+  website       String?
+  status        VendorStatus @default(ACTIVE)
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  version       Int          @default(0)
+
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assets             Asset[]
+  softwareLicenses   SoftwareLicense[]
+  maintenanceRecords MaintenanceRecord[]
+
+  @@index([tenantId, status])
+  @@map("vendors")
+}
+
+// -------- 11. Asset (the core) -----------------------------------------------
+
+model Asset {
+  id                 String      @id @default(cuid())
+  tenantId           String      @map("tenant_id")
+  assetTag           String      @map("asset_tag")
+  name               String
+  categoryId         String      @map("category_id")
+  manufacturer       String?
+  model              String?
+  serialNumber       String?     @map("serial_number")
+  macAddress         String?     @map("mac_address")
+  status             AssetStatus @default(IN_STOCK)
+  locationId         String      @map("location_id")
+  vendorId           String?     @map("vendor_id")
+  currency           String?     @default("USD")
+  purchaseCost       Decimal?    @map("purchase_cost") @db.Decimal(12, 2)
+  purchaseDate       DateTime?   @map("purchase_date") @db.Date
+  warrantyExpiry     DateTime?   @map("warranty_expiry") @db.Date
+  depreciationMonths Int?        @map("depreciation_months")
+  attributes         Json        @default("{}")
+  notes              String?     @db.Text
+  createdById        String      @map("created_by")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+  version            Int         @default(0)
+
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category           Category            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  location           Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  vendor             Vendor?             @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  createdBy          User                @relation("AssetCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  keyValueAttributes AssetAttribute[] // relation renamed to avoid clash with `attributes` Json
+  photos             AssetPhoto[]
+  assignments        Assignment[]
+  maintenance        MaintenanceRecord[]
+  licenseSeats       LicenseSeat[]
+
+  @@unique([tenantId, assetTag])
+  @@index([tenantId, status])
+  @@index([tenantId, categoryId])
+  @@index([tenantId, locationId])
+  @@index([tenantId, vendorId])
+  @@index([createdById])
+  @@index([attributes], type: Gin)
+  @@map("assets")
+}
+
+// -------- 12. AssetAttribute (see open question 1 in docs/erd.md) -------------
+
+model AssetAttribute {
+  id        String   @id @default(cuid())
+  assetId   String   @map("asset_id")
+  key       String
+  value     Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([assetId, key])
+  @@map("asset_attributes")
+}
+
+// -------- 13. AssetPhoto -----------------------------------------------------
+
+model AssetPhoto {
+  id           String   @id @default(cuid())
+  assetId      String   @map("asset_id")
+  filePath     String   @map("file_path")
+  caption      String?
+  uploadedById String   @map("uploaded_by")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  asset      Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation(fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([assetId])
+  @@map("asset_photos")
+}
+
+// -------- 14. Assignment -----------------------------------------------------
+
+model Assignment {
+  id               String    @id @default(cuid())
+  tenantId         String    @map("tenant_id")
+  assetId          String    @map("asset_id")
+  userId           String    @map("user_id") // the assignee
+  assignedById     String    @map("assigned_by")
+  assignedAt       DateTime  @default(now()) @map("assigned_at")
+  expectedReturnAt DateTime? @map("expected_return_at")
+  returnedAt       DateTime? @map("returned_at")
+  signaturePath    String?   @map("signature_path")
+  notes            String?   @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  version          Int       @default(0)
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset      Asset  @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  user       User   @relation("AssignmentAssignee", fields: [userId], references: [id], onDelete: Restrict)
+  assignedBy User   @relation("AssignmentAssigner", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId])
+  @@index([assetId, assignedAt(sort: Desc)], map: "assignments_asset_history_idx")
+  @@index([userId, assignedAt(sort: Desc)], map: "assignments_user_history_idx")
+  // Partial indexes (WHERE returned_at IS NULL) deferred to a raw-SQL migration;
+  // Prisma 5.22 does not accept `where` on `@@index`. See prisma/migrations/partial_indexes.sql.
+  @@index([assetId], map: "assignments_asset_active_idx")
+  @@index([userId], map: "assignments_user_active_idx")
+  @@map("assignments")
+}
+
+// -------- 15. SoftwareLicense ------------------------------------------------
+
+model SoftwareLicense {
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  name         String
+  vendorId     String?   @map("vendor_id")
+  licenseKey   String    @map("license_key")
+  seatsTotal   Int       @map("seats_total")
+  currency     String?   @default("USD")
+  cost         Decimal?  @db.Decimal(12, 2)
+  purchaseDate DateTime? @map("purchase_date") @db.Date
+  expiryDate   DateTime? @map("expiry_date") @db.Date
+  notes        String?   @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  version      Int       @default(0)
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  vendor Vendor?       @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  seats  LicenseSeat[]
+
+  @@index([tenantId, expiryDate])
+  @@index([vendorId])
+  @@map("software_licenses")
+}
+
+// -------- 16. LicenseSeat ----------------------------------------------------
+
+model LicenseSeat {
+  id         String    @id @default(cuid())
+  tenantId   String    @map("tenant_id")
+  licenseId  String    @map("license_id")
+  assetId    String?   @map("asset_id")
+  userId     String?   @map("user_id")
+  assignedAt DateTime  @default(now()) @map("assigned_at")
+  releasedAt DateTime? @map("released_at")
+
+  tenant  Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  license SoftwareLicense @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  asset   Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  user    User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  // Partial index (WHERE released_at IS NULL) deferred to a raw-SQL migration; see above.
+  @@index([licenseId], map: "license_seats_license_active_idx")
+  @@index([assetId])
+  @@index([userId])
+  @@map("license_seats")
+}
+
+// -------- 17. MaintenanceRecord ----------------------------------------------
+
+model MaintenanceRecord {
+  id            String            @id @default(cuid())
+  tenantId      String            @map("tenant_id")
+  assetId       String            @map("asset_id")
+  type          MaintenanceType
+  description   String            @db.Text
+  currency      String?           @default("USD")
+  cost          Decimal?          @db.Decimal(12, 2)
+  vendorId      String?           @map("vendor_id")
+  performedById String?           @map("performed_by")
+  performedAt   DateTime          @map("performed_at") @db.Date
+  status        MaintenanceStatus @default(OPEN)
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+  version       Int               @default(0)
+
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  asset       Asset   @relation(fields: [assetId], references: [id], onDelete: Restrict)
+  vendor      Vendor? @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  performedBy User?   @relation("MaintenancePerformer", fields: [performedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([assetId, performedAt(sort: Desc)])
+  @@index([vendorId])
+  @@index([performedById])
+  @@map("maintenance_records")
+}
+
+// -------- 18. ApprovalRequest -----------------------------------------------
+
+model ApprovalRequest {
+  id              String         @id @default(cuid())
+  tenantId        String         @map("tenant_id")
+  type            ApprovalType
+  status          ApprovalStatus @default(PENDING)
+  entityType      String         @map("entity_type")
+  entityId        String         @map("entity_id")
+  payload         Json
+  requestedById   String         @map("requested_by")
+  requestedAt     DateTime       @default(now()) @map("requested_at")
+  approverId      String?        @map("approver_id")
+  approvedAt      DateTime?      @map("approved_at")
+  rejectionReason String?        @map("rejection_reason") @db.Text
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  version         Int            @default(0)
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  requestedBy User   @relation("ApprovalRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  approver    User?  @relation("ApprovalApprover", fields: [approverId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, requestedAt(sort: Desc)])
+  @@index([entityType, entityId])
+  @@map("approval_requests")
+}
+
+// -------- 19. Notification ---------------------------------------------------
+
+model Notification {
+  id        String           @id @default(cuid())
+  tenantId  String           @map("tenant_id")
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  body      String?          @db.Text
+  link      String?
+  readAt    DateTime?        @map("read_at")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+// -------- 20. EmailJob -------------------------------------------------------
+
+model EmailJob {
+  id        String         @id @default(cuid())
+  tenantId  String         @map("tenant_id")
+  toEmails  String[]       @map("to_emails")
+  subject   String
+  template  String
+  data      Json           @default("{}")
+  status    EmailJobStatus @default(QUEUED)
+  attempts  Int            @default(0)
+  lastError String?        @map("last_error") @db.Text
+  sentAt    DateTime?      @map("sent_at")
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([tenantId, status])
+  @@map("email_jobs")
+}
+
+// -------- 21. WebhookSubscription --------------------------------------------
+
+model WebhookSubscription {
+  id              String         @id @default(cuid())
+  tenantId        String         @map("tenant_id")
+  channel         WebhookChannel
+  url             String         @db.Text // stored AES-256-GCM encrypted
+  events          String[]
+  createdById     String         @map("created_by")
+  lastDeliveredAt DateTime?      @map("last_delivered_at")
+  lastError       String?        @map("last_error") @db.Text
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  version         Int            @default(0)
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User   @relation("WebhookCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, channel])
+  @@map("webhook_subscriptions")
+}
+
+// -------- 22. AuditLog (append-only) -----------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  userId     String?  @map("user_id")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  before     Json?
+  after      Json?
+  ip         String?
+  userAgent  String?  @map("user_agent") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, entityType, entityId, createdAt(sort: Desc)])
+  @@index([tenantId, userId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_log")
+}

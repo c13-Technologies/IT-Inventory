@@ -1,0 +1,22 @@
+{
+  "name": "minia-inventory",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minia admin dashboard served via Express. Static-site mode: the existing HTML/CSS/JS in this folder is served as-is.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4",
+    "prisma": "^5.22.0"
+  }
+}
