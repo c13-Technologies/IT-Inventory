@@ -1,19 +1,12 @@
 
-    <!-- Project's local libs/jquery, libs/bootstrap, libs/metismenu, libs/simplebar, libs/node-waves, libs/pace-js, js/app.js all 404. CDN-ify them. -->
-    <!-- Feather Icons: replaces <i data-feather="home"> with inline <svg> at runtime. Must load before feather.replace() below. -->
+    <!-- Feather Icons: replaces <i data-feather="home"> with inline <svg> at runtime. Project has no local copy of feather.min.js, so load it from a CDN. Must load before the replace() call below. -->
     <script src="https://unpkg.com/feather-icons@4.29.0/dist/feather.min.js"></script>
-    <!-- jQuery 3.6 — required by Bootstrap JS, metisMenu, Waves, and most Minia components. -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <!-- Bootstrap 5.3 bundle (includes Popper for dropdowns/tooltips/modals). -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- metisMenu — collapsible sidebar menu plugin (jQuery). -->
-    <script src="https://cdn.jsdelivr.net/npm/metismenu@3.0.7/dist/metisMenu.min.js"></script>
-    <!-- Simplebar — styled scrollbars for sidebar/topbar. -->
-    <script src="https://cdn.jsdelivr.net/npm/simplebar@5.3.6/dist/simplebar.min.js"></script>
-    <!-- Waves — click ripple effect on .waves-effect buttons (jQuery). -->
-    <script src="https://cdn.jsdelivr.net/npm/node-waves@0.7.6/dist/waves.min.js"></script>
-    <!-- Pace.js — page-load progress bar. -->
-    <script src="https://cdn.jsdelivr.net/npm/pace-js@1.2.4/pace.min.js"></script>
+    <script src="assets/libs/jquery/jquery.min.js"></script>
+    <script src="assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/libs/metismenu/metisMenu.min.js"></script>
+    <script src="assets/libs/simplebar/simplebar.min.js"></script>
+    <script src="assets/libs/node-waves/waves.min.js"></script>
+    <script src="assets/libs/pace-js/pace.min.js"></script>
 
 <% if (typeof pageScripts !== "undefined" && pageScripts && pageScripts.length) { %>
 <% pageScripts.forEach(function (s) { %>
@@ -21,43 +14,5 @@
 <% }); %>
 <% } %>
 
-    <!-- Init shim — replaces the missing assets/js/app.js (the Minia theme's main init script). Wires up: feather icons, metisMenu (sidebar collapse), simplebar (scrollbars), Waves (ripples), sidebar toggle, right-bar toggle. -->
-    <script>
-      (function () {
-        function init() {
-          // Feather Icons: replace <i data-feather="X"> with inline <svg>
-          if (window.feather) feather.replace();
-
-          // Sidebar menu (metisMenu)
-          if (window.jQuery && jQuery.fn && jQuery.fn.metisMenu) {
-            jQuery('#side-menu').metisMenu();
-          }
-          // Simplebar on [data-simplebar] elements
-          if (window.SimpleBar) {
-            document.querySelectorAll('[data-simplebar]').forEach(function (el) {
-              if (el.SimpleBar) return;
-              try { new SimpleBar(el); } catch (e) { /* already inited or unsupported */ }
-            });
-          }
-          // Waves: auto-attach click ripples to .waves-effect
-          if (window.Waves && typeof Waves.init === 'function') {
-            Waves.init();
-          }
-          // Sidebar toggle button (#vertical-menu-btn) and right-bar toggle (.right-bar-toggle)
-          if (window.jQuery) {
-            jQuery(document).on('click', '#vertical-menu-btn', function () {
-              jQuery('body').toggleClass('sidebar-enable');
-            });
-            jQuery(document).on('click', '.right-bar-toggle', function (e) {
-              e.preventDefault();
-              jQuery('body').toggleClass('right-bar-enabled');
-            });
-          }
-        }
-        if (document.readyState === 'loading') {
-          document.addEventListener('DOMContentLoaded', init);
-        } else {
-          init();
-        }
-      })();
-    </script>
+    <script src="assets/js/app.js"></script>
+    <script>if (window.feather) { feather.replace(); }</script>
