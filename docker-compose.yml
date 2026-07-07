@@ -1,0 +1,42 @@
+# docker-compose.yml
+#
+# One-shot dev database for the IT Inventory app.
+#
+# First time only — if you previously created the container with `docker run
+# --name it-inventory-pg ...`, remove it first so Compose can claim the name:
+#     docker rm -f it-inventory-pg
+# (your data in the `pgdata` named volume is untouched).
+#
+# Then from the project root:
+#     npm run db:up         # start
+#     npm run db:down       # stop (data preserved)
+#     npm run db:reset      # stop + wipe volume + recreate + run prisma db push
+#     npm run db:logs       # tail postgres logs
+#     npm run db:psql       # open psql inside the container
+#
+# Compose reads POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB from .env, so
+# DATABASE_URL in .env and the container's credentials stay in sync.
+
+services:
+  db:
+    image: postgres:16
+    container_name: it-inventory-pg
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready exits 0 when the server accepts connections. Uses the
+      # POSTGRES_USER / POSTGRES_DB that env_file injected into the container.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  pgdata:
+    # Named volume so `docker compose down` (without -v) preserves the data.
+    name: pgdata

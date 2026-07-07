@@ -101,17 +101,25 @@ At minimum, set:
 ### 3. Start Postgres (Docker, dev-only)
 
 ```bash
-docker run --name inventory-pg \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=inventory_dev \
-  -p 5432:5432 -d postgres:16-alpine
+npm run db:up
 ```
+
+> **First time only:** if you previously created the container with `docker run --name it-inventory-pg ...`, remove it first so Compose can claim the name: `docker rm -f it-inventory-pg` (your data in the `pgdata` named volume is untouched).
+
+Other DB scripts:
+
+| Command | What it does |
+|---|---|
+| `npm run db:up` | Start the Postgres container in the background |
+| `npm run db:down` | Stop the container (data in `pgdata` preserved) |
+| `npm run db:reset` | Stop, wipe the `pgdata` volume, restart, and re-apply the Prisma schema |
+| `npm run db:logs` | Tail the Postgres container logs |
+| `npm run db:psql` | Open a psql shell inside the container |
 
 ### 4. Apply the schema
 
 ```bash
-npx prisma migrate dev --name init
+npx prisma db push     # apply prisma/schema.prisma to the dev DB
 # (coming soon) npx prisma db seed    # roles, permissions, demo tenant
 ```
 
@@ -132,6 +140,11 @@ Then open <http://127.0.0.1:3000/>.
 | `npm start` | Start the server with Node |
 | `npm run dev` | Start with nodemon (auto-reload on file changes) |
 | `npm run serve` | Alias for `npm start` |
+| `npm run db:up` | Start the Postgres container |
+| `npm run db:down` | Stop the Postgres container |
+| `npm run db:reset` | Wipe the volume + restart + re-apply the Prisma schema |
+| `npm run db:logs` | Tail Postgres logs |
+| `npm run db:psql` | Open psql inside the container |
 | `npx prisma format` | Auto-format `prisma/schema.prisma` |
 | `npx prisma validate` | Validate the schema syntax and relations |
 | `npx prisma migrate dev` | Generate and apply migrations (dev) |
@@ -143,7 +156,10 @@ Then open <http://127.0.0.1:3000/>.
 
 | Var | Required | Default | Notes |
 |---|---|---|---|
-| `DATABASE_URL` | ✅ | — | Postgres connection string |
+| `DATABASE_URL` | ✅ | — | Postgres connection string the app uses |
+| `POSTGRES_USER` | ✅ (compose) | `postgres` | Read by `docker-compose.yml` when starting the dev DB |
+| `POSTGRES_PASSWORD` | ✅ (compose) | — | Must match the password in `DATABASE_URL` |
+| `POSTGRES_DB` | ✅ (compose) | `inventory_dev` | Read by `docker-compose.yml` when creating the container |
 | `JWT_SECRET` | ✅ | — | 32+ char random string |
 | `WEBHOOK_ENCRYPTION_KEY` | ✅ | — | 32-byte key, base64-encoded |
 | `RESEND_API_KEY` | ❌ | — | For outbound email (sign up at <https://resend.com>) |
