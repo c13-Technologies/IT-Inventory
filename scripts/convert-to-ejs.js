@@ -8,7 +8,7 @@
 //
 // Output:
 //   views/partials/{head,topbar,sidebar,footer,scripts,scripts-auth}.ejs
-//   views/pages/<name>.ejs  (one per *.html, minus this script's own dir)
+//   views/pages/<name>.ejs  (one per *.html)
 //   views/titles.json       (page-name -> human title, used by server.js)
 //
 // Safe to delete this file after a successful run.
@@ -75,8 +75,6 @@ function listScriptSrcs(html) {
   return out;
 }
 
-// Extract a substring bounded by two literal markers, returning null if either
-// marker is missing.
 function between(html, startMarker, endMarker) {
   const s = html.indexOf(startMarker);
   if (s === -1) return null;
@@ -85,28 +83,57 @@ function between(html, startMarker, endMarker) {
   return html.substring(s, e + endMarker.length);
 }
 
+// Return the full text of the line containing <script src="URL"></script>.
+// Critical: this preserves the leading '<script src="' AND the trailing
+// '"></script>' of the matched line. The previous version used
+// html.indexOf(url) which found the URL mid-line and dropped both edges.
+function getScriptLineText(html, url) {
+  const idx = html.indexOf(url);
+  if (idx < 0) return null;
+  // Walk back to the start of the line that contains this URL.
+  const lineStart = html.lastIndexOf('\n', idx) + 1;
+  if (html.substring(lineStart, idx).indexOf('<script') < 0) return null;
+  // Walk forward through </script> and the trailing newline.
+  const closeIdx = html.indexOf('</script>', idx);
+  if (closeIdx < 0) return null;
+  const lineEndIdx = html.indexOf('\n', closeIdx);
+  const end = lineEndIdx >= 0 ? lineEndIdx : html.length;
+  return html.substring(lineStart, end);
+}
+
+// Return { text, start, end } of the line containing <script src="URL"></script>.
+function findScriptLine(html, url) {
+  const idx = html.indexOf(url);
+  if (idx < 0) return null;
+  const lineStart = html.lastIndexOf('\n', idx) + 1;
+  if (html.substring(lineStart, idx).indexOf('<script') < 0) return null;
+  const closeIdx = html.indexOf('</script>', idx);
+  if (closeIdx < 0) return null;
+  const lineEndIdx = html.indexOf('\n', closeIdx);
+  const end = lineEndIdx >= 0 ? lineEndIdx : html.length;
+  return { text: html.substring(lineStart, end), start: lineStart, end };
+}
+
 // ---------------- step 1: partials from index.html ----------------
 
 function buildPartials() {
   const indexHtml = read('index.html');
 
-  // head.ejs  — DOCTYPE .. </head>, with <title> replaced by an EJS var
-  const headSrc = indexHtml.substring(
-    indexHtml.indexOf('<!doctype html>'),
-    indexHtml.indexOf('</head>') + '</head>'.length
-  );
+  // head.ejs — DOCTYPE .. </head>, with <title> replaced by an EJS var
+  const headSrc = between(indexHtml, '<!doctype html>', '</head>');
+  if (!headSrc) throw new Error('Could not extract head from index.html');
   const headEjs = headSrc.replace(
     /<title>[^<]+<\/title>/,
     '<title><%= title %> | Minia - Minimal Admin & Dashboard Template</title>'
   );
   write('views/partials/head.ejs', headEjs);
 
-  // topbar.ejs  — entire <header id="page-topbar">...</header>
+  // topbar.ejs — entire <header id="page-topbar">...</header>
   const topbarEjs = between(indexHtml, '<header id="page-topbar">', '</header>');
   if (!topbarEjs) throw new Error('Could not extract topbar from index.html');
   write('views/partials/topbar.ejs', topbarEjs);
 
-  // sidebar.ejs  — <div class="vertical-menu"> ... up to the "Left Sidebar End" comment
+  // sidebar.ejs — <div class="vertical-menu"> ... up to the "Left Sidebar End" comment
   const sidebarStart = indexHtml.indexOf('<div class="vertical-menu">');
   const sidebarEnd = indexHtml.indexOf('<!-- Left Sidebar End -->');
   if (sidebarStart < 0 || sidebarEnd < 0) {
@@ -114,27 +141,27 @@ function buildPartials() {
   }
   write('views/partials/sidebar.ejs', indexHtml.substring(sidebarStart, sidebarEnd).trim() + '\n');
 
-  // footer.ejs  — <footer class="footer"> ... </footer>
+  // footer.ejs — <footer class="footer"> ... </footer>
   const footerEjs = between(indexHtml, '<footer class="footer">', '</footer>');
   if (!footerEjs) throw new Error('Could not extract footer from index.html');
   write('views/partials/footer.ejs', footerEjs);
 
-  // scripts.ejs  — common libs (jquery .. pace) + app.js, with a
-  // `pageScripts` slot in between for per-page extras.
-  const firstLibIdx = indexHtml.indexOf(COMMON_LIBS[0]);
-  const appJsLineEnd = indexHtml.indexOf('\n', indexHtml.indexOf(APP_JS)) + 1;
-  if (firstLibIdx < 0 || appJsLineEnd < 0) {
-    throw new Error('Could not extract scripts block from index.html');
+  // scripts.ejs — common libs (jquery .. pace) + app.js, with a
+  // `pageScripts` slot in between for per-page extras. Use getScriptLineText
+  // so each line is captured WHOLE (with its leading <script src=" and
+  // trailing ></script> intact).
+  const commonLines = COMMON_LIBS
+    .map(lib => getScriptLineText(indexHtml, lib))
+    .filter(Boolean);
+  if (commonLines.length !== COMMON_LIBS.length) {
+    const missing = COMMON_LIBS.filter(lib => !getScriptLineText(indexHtml, lib));
+    throw new Error('Missing common libs in index.html: ' + missing.join(', '));
   }
-  const commonBlock = indexHtml.substring(firstLibIdx, appJsLineEnd).trimEnd();
-
-  // Split out the "pace.min.js" line as the end of the common libs.
-  const lastLibIdx = commonBlock.lastIndexOf('pace.min.js');
-  const commonOnly = commonBlock.substring(0, lastLibIdx + 'pace.min.js'.length);
+  // commonBlock already has the original 4-space indentation on each line.
+  const commonBlock = commonLines.join('\n') + '\n';
 
   const scriptsEjs =
-    '\n' + indent(commonOnly, 4) + '\n' +
-    '\n' +
+    '\n' + commonBlock + '\n' +
     '<% if (typeof pageScripts !== "undefined" && pageScripts && pageScripts.length) { %>\n' +
     '<% pageScripts.forEach(function (s) { %>\n' +
     '    <script src="<%= s %>"></script>\n' +
@@ -144,21 +171,15 @@ function buildPartials() {
     '    <script src="assets/js/app.js"></script>\n';
   write('views/partials/scripts.ejs', scriptsEjs);
 
-  // scripts-auth.ejs  — same common libs, no app.js (auth pages don't need it)
+  // scripts-auth.ejs — same common libs, no app.js (auth pages don't need it)
   const scriptsAuthEjs =
-    '\n' + indent(commonOnly, 4) + '\n' +
-    '\n' +
+    '\n' + commonBlock + '\n' +
     '<% if (typeof pageScripts !== "undefined" && pageScripts && pageScripts.length) { %>\n' +
     '<% pageScripts.forEach(function (s) { %>\n' +
     '    <script src="<%= s %>"></script>\n' +
     '<% }); %>\n' +
     '<% } %>\n';
   write('views/partials/scripts-auth.ejs', scriptsAuthEjs);
-}
-
-function indent(block, spaces) {
-  const pad = ' '.repeat(spaces);
-  return block.split('\n').map(l => l.length ? pad + l : l).join('\n');
 }
 
 // ---------------- step 2: convert every *.html ----------------
@@ -170,38 +191,34 @@ function pageScriptsFor(html) {
 function convertMainLayout(html, title) {
   let out = html;
 
-  // head
   out = out.replace(
     /<!doctype html>[\s\S]*?<\/head>/i,
     `<%- include('../partials/head', { title: ${JSON.stringify(title)} }) %>`
   );
 
-  // topbar
   out = out.replace(
     /<header id="page-topbar">[\s\S]*?<\/header>/,
     `<%- include('../partials/topbar') %>`
   );
 
-  // sidebar (from the opening <div class="vertical-menu"> up to the
-  // "Left Sidebar End" comment that follows the closing </div>).
   out = out.replace(
     /<div class="vertical-menu">[\s\S]*?<!-- Left Sidebar End -->/,
     `<%- include('../partials/sidebar') %>\n        <!-- Left Sidebar End -->`
   );
 
-  // footer
   out = out.replace(
     /<footer class="footer">[\s\S]*?<\/footer>/,
     `<%- include('../partials/footer') %>`
   );
 
-  // scripts: replace the first <script> through the app.js line with a single
-  // include that injects the page-specific extras via the pageScripts variable.
-  const firstLibIdx = out.indexOf(COMMON_LIBS[0]);
-  const appJsLineEnd = out.indexOf('\n', out.indexOf(APP_JS)) + 1;
-  if (firstLibIdx > -1 && appJsLineEnd > 0) {
-    const before = out.substring(0, firstLibIdx);
-    const after = out.substring(appJsLineEnd);
+  // scripts: replace from the start of the jquery.min.js LINE through the
+  // end of the app.js LINE (inclusive) with a single include. Using
+  // findScriptLine avoids the off-by-tag bug from the previous version.
+  const firstLine = findScriptLine(out, COMMON_LIBS[0]);
+  const appJsLine = findScriptLine(out, APP_JS);
+  if (firstLine && appJsLine && appJsLine.start > firstLine.start) {
+    const before = out.substring(0, firstLine.start);
+    const after = out.substring(appJsLine.end);
     const pageScripts = pageScriptsFor(html);
     out = before +
       `<%- include('../partials/scripts', { pageScripts: ${JSON.stringify(pageScripts)} }) %>\n` +
@@ -214,19 +231,18 @@ function convertMainLayout(html, title) {
 function convertAuthLayout(html, title) {
   let out = html;
 
-  // head
   out = out.replace(
     /<!doctype html>[\s\S]*?<\/head>/i,
     `<%- include('../partials/head', { title: ${JSON.stringify(title)} }) %>`
   );
 
-  // scripts: from the first common lib through the last (pace.min.js) line.
-  const firstLibIdx = out.indexOf(COMMON_LIBS[0]);
-  const lastLibName = COMMON_LIBS[COMMON_LIBS.length - 1];
-  const lastLibEnd = out.indexOf('\n', out.indexOf(lastLibName)) + 1;
-  if (firstLibIdx > -1 && lastLibEnd > 0) {
-    const before = out.substring(0, firstLibIdx);
-    const after = out.substring(lastLibEnd);
+  // scripts: replace from the start of the jquery.min.js LINE through the
+  // end of the pace.min.js LINE (inclusive) with a single include. No app.js.
+  const firstLine = findScriptLine(out, COMMON_LIBS[0]);
+  const lastLine = findScriptLine(out, COMMON_LIBS[COMMON_LIBS.length - 1]);
+  if (firstLine && lastLine && lastLine.start > firstLine.start) {
+    const before = out.substring(0, firstLine.start);
+    const after = out.substring(lastLine.end);
     const pageScripts = pageScriptsFor(html);
     out = before +
       `<%- include('../partials/scripts-auth', { pageScripts: ${JSON.stringify(pageScripts)} }) %>\n` +
@@ -267,7 +283,7 @@ function convertAll() {
   fs.writeFileSync(TITLES_PATH, JSON.stringify(titles, null, 2) + '\n');
 
   console.log('\n--- Conversion summary ---');
-  console.log('Layouts: ' + summary.reduce((acc, r) => (acc[r.layout] = (acc[r.layout] || 0) + 1, acc), {}));
+  console.log('Layouts: ' + JSON.stringify(summary.reduce((acc, r) => (acc[r.layout] = (acc[r.layout] || 0) + 1, acc), {})));
   console.log('Total pages: ' + summary.length);
   for (const r of summary) {
     console.log(
@@ -288,5 +304,5 @@ function convertAll() {
   console.log('\nStep 2: converting every *.html to views/pages/*.ejs ...');
   convertAll();
 
-  console.log('\nDone. Next: update server.js to mount EJS, then `npm start` and curl /index.html.');
+  console.log('\nDone. Next: delete the now-redundant root *.html files, then `npm start`.');
 })();
