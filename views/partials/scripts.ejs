@@ -1,10 +1,11 @@
 
+    <!-- Feather Icons: replaces <i data-feather="home"> with inline <svg> at runtime. Project has no local copy of feather.min.js, so load it from a CDN. Must load before the replace() call below. -->
+    <script src="https://unpkg.com/feather-icons@4.29.0/dist/feather.min.js"></script>
     <script src="assets/libs/jquery/jquery.min.js"></script>
     <script src="assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="assets/libs/metismenu/metisMenu.min.js"></script>
     <script src="assets/libs/simplebar/simplebar.min.js"></script>
     <script src="assets/libs/node-waves/waves.min.js"></script>
-    <script src="assets/libs/feather-icons/feather.min.js"></script>
     <script src="assets/libs/pace-js/pace.min.js"></script>
 
 <% if (typeof pageScripts !== "undefined" && pageScripts && pageScripts.length) { %>
@@ -14,3 +15,4 @@
 <% } %>
 
     <script src="assets/js/app.js"></script>
+    <script>if (window.feather) { feather.replace(); }</script>

@@ -1,0 +1,53 @@
+[server] Port 3000 is in use, trying 3001...
+[server] Port 3001 is in use, trying 3002...
+[server] Bound after 2 retry(ies).
+
+Minia server running at http://127.0.0.1:3002
+Dashboard:  http://127.0.0.1:3002/
+Login page: http://127.0.0.1:3002/auth-login.html
+Press Ctrl+C to stop.
+
+[2026-07-07T16:02:32.860Z] GET /index.html
+[2026-07-07T16:02:32.929Z] GET /assets/libs/admin-resources/jquery.vectormap/jquery-jvectormap-1.2.2.css
+[2026-07-07T16:02:32.933Z] GET /assets/css/preloader.min.css
+[2026-07-07T16:02:32.937Z] GET /assets/css/bootstrap.min.css
+[2026-07-07T16:02:32.938Z] GET /assets/css/icons.min.css
+[2026-07-07T16:02:32.952Z] GET /assets/css/app.min.css
+[2026-07-07T16:02:32.969Z] GET /assets/images/logo-sm.svg
+[2026-07-07T16:02:32.969Z] GET /assets/images/flags/us.jpg
+[2026-07-07T16:02:32.976Z] GET /assets/libs/jquery/jquery.min.js
+[2026-07-07T16:02:32.977Z] GET /assets/libs/bootstrap/js/bootstrap.bundle.min.js
+[2026-07-07T16:02:32.980Z] GET /assets/libs/metismenu/metisMenu.min.js
+[2026-07-07T16:02:32.982Z] GET /assets/libs/simplebar/simplebar.min.js
+[2026-07-07T16:02:32.983Z] GET /assets/libs/node-waves/waves.min.js
+[2026-07-07T16:02:32.984Z] GET /assets/libs/feather-icons/feather.min.js
+[2026-07-07T16:02:32.994Z] GET /assets/libs/admin-resources/jquery.vectormap/jquery-jvectormap-1.2.2.min.js
+[2026-07-07T16:02:32.995Z] GET /assets/libs/admin-resources/jquery.vectormap/maps/jquery-jvectormap-world-mill-en.js
+[2026-07-07T16:02:32.996Z] GET /assets/js/pages/dashboard.init.js
+[2026-07-07T16:02:32.996Z] GET /assets/js/app.js
+[2026-07-07T16:02:33.001Z] GET /assets/images/flags/spain.jpg
+[2026-07-07T16:02:33.005Z] GET /assets/images/flags/germany.jpg
+[2026-07-07T16:02:33.009Z] GET /assets/images/flags/italy.jpg
+[2026-07-07T16:02:33.013Z] GET /assets/images/flags/russia.jpg
+[2026-07-07T16:02:33.016Z] GET /assets/images/brands/github.png
+[2026-07-07T16:02:33.017Z] GET /assets/images/brands/bitbucket.png
+[2026-07-07T16:02:33.020Z] GET /assets/images/brands/dribbble.png
+[2026-07-07T16:02:33.024Z] GET /assets/images/brands/dropbox.png
+[2026-07-07T16:02:33.025Z] GET /assets/images/brands/mail_chimp.png
+[2026-07-07T16:02:33.028Z] GET /assets/images/brands/slack.png
+[2026-07-07T16:02:33.030Z] GET /assets/images/users/avatar-3.jpg
+[2026-07-07T16:02:33.031Z] GET /assets/images/users/avatar-6.jpg
+[2026-07-07T16:02:33.034Z] GET /assets/images/users/avatar-1.jpg
+[2026-07-07T16:02:33.040Z] GET /assets/images/giftbox.png
+[2026-07-07T16:02:33.279Z] GET /assets/fonts/fa-solid-900.woff2
+[2026-07-07T16:02:33.279Z] GET /assets/fonts/boxicons.woff2
+[2026-07-07T16:02:33.282Z] GET /assets/fonts/materialdesignicons-webfont.woff2?v=6.5.95
+[2026-07-07T16:02:33.288Z] GET /assets/css/preloader.min.css.map
+[2026-07-07T16:02:33.300Z] GET /assets/css/app.min.css.map
+[2026-07-07T16:02:33.300Z] GET /assets/css/bootstrap.min.css.map
+[2026-07-07T16:02:33.300Z] GET /assets/css/icons.min.css.map
+[2026-07-07T16:02:33.390Z] GET /assets/libs/bootstrap/js/bootstrap.bundle.min.js.map
+[2026-07-07T16:02:33.391Z] GET /assets/libs/metismenu/metisMenu.min.js.map
+[2026-07-07T16:02:33.404Z] GET /assets/libs/node-waves/waves.min.js.map
+[2026-07-07T16:02:33.405Z] GET /assets/libs/feather-icons/feather.min.js.map
+[2026-07-07T16:02:33.497Z] GET /assets/images/favicon.ico

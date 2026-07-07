@@ -1,0 +1,26 @@
+<%# views/partials/breadcrumb.ejs
+   Renders a Minia-styled breadcrumb.
+
+   Usage (note: replace the arrow markers below with the real tag chars
+   when you actually paste this into a template — EJS comments cannot
+   contain literal EJS tag delimiters or the comment ends early):
+     <example-block>
+       include('../partials/breadcrumb', { items: [
+         { label: 'Assets', href: '/assets' },
+         { label: 'Detail', href: null },   // active (no link)
+       ] })
+     </example-block>
+%>
+<% if (typeof items !== 'undefined' && items && items.length) { %>
+  <ol class="breadcrumb m-0">
+    <% items.forEach(function(item, i) { %>
+      <li class="breadcrumb-item<%= i === items.length - 1 ? ' active' : '' %>">
+        <% if (item.href && i < items.length - 1) { %>
+          <a href="<%= item.href %>" class="text-reset"><%= item.label %></a>
+        <% } else { %>
+          <%= item.label %>
+        <% } %>
+      </li>
+    <% }); %>
+  </ol>
+<% } %>

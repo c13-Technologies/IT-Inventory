@@ -1,0 +1,55 @@
+<!--
+  views/partials/modals/assign-asset.ejs
+  Modal for assigning an asset to a user.
+  Usage: pass { asset, users }; renders Bootstrap modal #assignAssetModal that
+  posts to /assets/[id]/assign. (EJS tag markers omitted in this doc comment
+  so EJS doesn't try to evaluate them at render time.)
+-->
+<div class="modal fade" id="assignAssetModal" tabindex="-1" aria-labelledby="assignAssetModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="POST" action="/assets/<%= asset.id %>/assign">
+        <div class="modal-header">
+          <h5 class="modal-title" id="assignAssetModalLabel">
+            <i class="bx bx-user-plus me-1"></i>Assign asset
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <% if (asset.status === 'ASSIGNED') { %>
+            <div class="alert alert-warning">
+              <i class="bx bx-info-circle me-1"></i>
+              This asset is currently assigned to <strong><%= asset.assignedTo ? asset.assignedTo.fullName : 'someone' %></strong>. Re-assigning will end the current assignment.
+            </div>
+          <% } %>
+          <p class="text-muted small mb-3">
+            Asset: <strong><%= asset.assetTag %></strong> — <%= asset.name %>
+          </p>
+          <div class="mb-3">
+            <label for="assign-userId" class="form-label">Assign to <span class="text-danger">*</span></label>
+            <select id="assign-userId" name="userId" class="form-select" required>
+              <option value="">— Select a user —</option>
+              <% (users || []).forEach(function(u) { %>
+                <option value="<%= u.id %>"><%= u.fullName %> &middot; <%= u.email %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="assign-expectedReturnAt" class="form-label">Expected return date <span class="text-muted">(optional)</span></label>
+            <input type="date" id="assign-expectedReturnAt" name="expectedReturnAt" class="form-control">
+          </div>
+          <div class="mb-0">
+            <label for="assign-notes" class="form-label">Notes <span class="text-muted">(optional)</span></label>
+            <textarea id="assign-notes" name="notes" class="form-control" rows="3" placeholder="e.g. Permanent assignment, returned on Q1, etc."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">
+            <i class="bx bx-check me-1"></i>Assign
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

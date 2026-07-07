@@ -1,0 +1,69 @@
+<!--
+  views/partials/modals/retire-asset.ejs
+  Modal for retiring / disposing of an asset.
+  Usage: pass { asset }; renders Bootstrap modal #retireAssetModal that posts
+  to /assets/[id]/retire. (EJS tag markers omitted in this doc comment so EJS
+  doesn't try to evaluate them at render time.)
+-->
+<div class="modal fade" id="retireAssetModal" tabindex="-1" aria-labelledby="retireAssetModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form method="POST" action="/assets/<%= asset.id %>/retire">
+        <div class="modal-header">
+          <h5 class="modal-title" id="retireAssetModalLabel">
+            <i class="bx bx-archive me-1 text-danger"></i>Retire asset
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-warning">
+            <i class="bx bx-error me-1"></i>
+            This will mark the asset as <strong>RETIRED</strong>. The record is preserved (no hard delete), but it will no longer appear in active assignment lists. This action is reversible by an admin.
+          </div>
+          <p class="text-muted small mb-3">
+            Asset: <strong><%= asset.assetTag %></strong> — <%= asset.name %>
+          </p>
+          <div class="mb-3">
+            <label for="retire-reason" class="form-label">Reason <span class="text-danger">*</span></label>
+            <select id="retire-reason" name="reason" class="form-select" required>
+              <option value="">— Select a reason —</option>
+              <option value="END_OF_LIFE">End of life (EOL)</option>
+              <option value="DAMAGED">Damaged beyond repair</option>
+              <option value="OBSOLETE">Obsolete (replaced)</option>
+              <option value="SOLD">Sold</option>
+              <option value="DONATED">Donated</option>
+              <option value="LOST_STOLEN">Lost or stolen</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="retire-disposalMethod" class="form-label">Disposal method <span class="text-muted">(optional)</span></label>
+            <select id="retire-disposalMethod" name="disposalMethod" class="form-select">
+              <option value="">— None / N/A —</option>
+              <option value="EWASTE_RECYCLED">E-waste recycling</option>
+              <option value="VENDOR_TRADEIN">Vendor trade-in</option>
+              <option value="RESOLD">Resold (internal or 3rd party)</option>
+              <option value="DONATED_NONPROFIT">Donated to non-profit</option>
+              <option value="DESTROYED">Destroyed (data-bearing devices)</option>
+              <option value="STORED">Stored (pending decision)</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="retire-retiredAt" class="form-label">Retired on <span class="text-danger">*</span></label>
+            <input type="date" id="retire-retiredAt" name="retiredAt" class="form-control" value="<%= new Date().toISOString().slice(0, 10) %>" required>
+          </div>
+          <div class="mb-0">
+            <label for="retire-notes" class="form-label">Notes <span class="text-muted">(optional)</span></label>
+            <textarea id="retire-notes" name="notes" class="form-control" rows="3" placeholder="e.g. Recycled through GreenChip, certificate #1234"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bx bx-archive me-1"></i>Retire
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

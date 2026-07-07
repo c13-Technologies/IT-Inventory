@@ -1,0 +1,177 @@
+<% const assetColumns = [{key:'assetTag',label:'Tag'},{key:'name',label:'Name'},{key:'category.name',label:'Category'},{key:'status',label:'Status',badge:true},{key:'location.name',label:'Location'},{key:'assignedTo.fullName',label:'Assigned To'},{label:'',align:'end',render:function(row){return '<div class="d-flex gap-1 justify-content-end"><a href="/assets/'+row.id+'" class="btn btn-sm btn-soft-primary" title="View"><i class="bx bx-show"></i></a><a href="/assets/'+row.id+'/edit" class="btn btn-sm btn-soft-secondary" title="Edit"><i class="bx bx-edit"></i></a><a href="/assets/'+row.id+'/qr" class="btn btn-sm btn-soft-info" title="Print QR" target="_blank"><i class="bx bx-qr"></i></a></div>';}}]; %>
+<% const assetRowUrl = function(a){return '/assets/'+a.id;}; %>
+<% const breadcrumbItems = [{label:'Home',href:'/'},{label:'Assets',href:null}]; %>
+<% const statuses = ['','IN_STOCK','ASSIGNED','IN_REPAIR','RETIRED','LOST']; %>
+<% const badgeColor = function(val){ if(val==='IN_STOCK'||val==='ACTIVE'||val==='COMPLETED'||val==='APPROVED')return'success'; if(val==='ASSIGNED'||val==='IN_PROGRESS'||val==='PENDING')return'primary'; if(val==='IN_REPAIR'||val==='WARNING'||val==='DRAFT')return'warning'; if(val==='RETIRED'||val==='INACTIVE'||val==='DISABLED')return'secondary'; if(val==='LOST'||val==='OVERDUE'||val==='REJECTED'||val==='DAMAGED')return'danger'; return'info'; }; %>
+<% const getVal = function(obj, dk){ return dk.split('.').reduce(function(o,k){ return o==null?undefined:o[k]; }, obj); }; %>
+<%- include('../../partials/head', { title: title }) %>
+
+<body>
+  <div id="layout-wrapper">
+    <%- include('../../partials/topbar') %>
+    <%- include('../../partials/sidebar') %>
+
+    <div class="main-content">
+      <div class="page-content">
+        <div class="container-fluid">
+
+          <!-- Title bar -->
+          <div class="row">
+            <div class="col-12">
+              <div class="page-title-box d-sm-flex align-items-center justify-content-between">
+                <h4 class="mb-sm-0 font-size-18">Assets</h4>
+                <div class="page-title-right">
+                  <%- include('../../partials/breadcrumb', { items: breadcrumbItems }) %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filters + Table -->
+          <div class="row">
+            <div class="col-lg-3">
+              <div class="card">
+                <div class="card-body">
+                  <h5 class="card-title mb-3"><i class="bx bx-filter-alt me-1"></i>Filters</h5>
+                  <form method="GET" action="/assets" id="assetFilters">
+                    <div class="mb-3">
+                      <label class="form-label">Search</label>
+                      <input type="text" name="search" class="form-control" placeholder="Name, tag, or serial…" value="<%= (query && query.search) || '' %>">
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Status</label>
+                      <select name="status" class="form-select">
+                        <% statuses.forEach(function(s) { %>
+                          <option value="<%= s %>" <%= (query && query.status) === s ? 'selected' : '' %>><%= s === '' ? '— Any status —' : s.replace(/_/g, ' ') %></option>
+                        <% }); %>
+                      </select>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Category</label>
+                      <select name="categoryId" class="form-select">
+                        <option value="">— Any category —</option>
+                        <% categories.forEach(function(c) { %>
+                          <option value="<%= c.id %>" <%= (query && query.categoryId) === c.id ? 'selected' : '' %>><%= c.name %></option>
+                        <% }); %>
+                      </select>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Location</label>
+                      <select name="locationId" class="form-select">
+                        <option value="">— Any location —</option>
+                        <% locations.forEach(function(l) { %>
+                          <option value="<%= l.id %>" <%= (query && query.locationId) === l.id ? 'selected' : '' %>><%= l.name %></option>
+                        <% }); %>
+                      </select>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Vendor</label>
+                      <select name="vendorId" class="form-select">
+                        <option value="">— Any vendor —</option>
+                        <% vendors.forEach(function(v) { %>
+                          <option value="<%= v.id %>" <%= (query && query.vendorId) === v.id ? 'selected' : '' %>><%= v.name %></option>
+                        <% }); %>
+                      </select>
+                    </div>
+                    <div class="form-check mb-3">
+                      <input class="form-check-input" type="checkbox" id="assignedOnly" name="assignedOnly" value="1" <%= (query && query.assignedOnly) ? 'checked' : '' %>>
+                      <label class="form-check-label" for="assignedOnly">Assigned to someone only</label>
+                    </div>
+                    <div class="d-grid gap-2">
+                      <button type="submit" class="btn btn-primary"><i class="bx bx-search me-1"></i>Apply</button>
+                      <a href="/assets" class="btn btn-light"><i class="bx bx-reset me-1"></i>Reset</a>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-lg-9">
+              <div class="card">
+                <div class="card-body">
+                  <div class="d-flex align-items-center justify-content-between mb-3">
+                    <h5 class="card-title mb-0"><%= result.total %> asset<%= result.total === 1 ? '' : 's' %><% if (result.total !== assetsAll.length) { %><small class="text-muted"> (of <%= assetsAll.length %>)</small><% } %></h5>
+                    <a href="/assets/new" class="btn btn-primary"><i class="bx bx-plus me-1"></i>New Asset</a>
+                  </div>
+
+                  <!-- Inlined table (was the data-table partial; inlined to bypass an EJS include-data propagation edge case) -->
+                  <div class="table-responsive">
+                    <table id="assets-table" class="table table-nowrap align-middle mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          <% assetColumns.forEach(function(col) { %>
+                            <th class="<%= col.align ? 'text-' + col.align : '' %>"><%= col.label %></th>
+                          <% }); %>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <% if (!result.rows || result.rows.length === 0) { %>
+                          <tr>
+                            <td colspan="<%= assetColumns.length %>" class="text-center text-muted py-4">
+                              No assets match your filters.
+                            </td>
+                          </tr>
+                        <% } else { %>
+                          <% result.rows.forEach(function(row) { %>
+                            <tr <%- assetRowUrl ? 'data-href="' + assetRowUrl(row) + '" style="cursor:pointer"' : '' %>>
+                              <% assetColumns.forEach(function(col) { %>
+                                <td class="<%= col.align ? 'text-' + col.align : '' %>">
+                                  <% if (typeof col.render === 'function') { %>
+                                    <%- col.render(row) %>
+                                  <% } else if (col.badge) { %>
+                                    <span class="badge bg-<%= badgeColor(row[col.key]) %>">
+                                      <%= String(row[col.key] || '').replace(/_/g, ' ') %>
+                                    </span>
+                                  <% } else { %>
+                                    <% var v = getVal(row, col.key); %>
+                                    <%= v == null ? '—' : v %>
+                                  <% } %>
+                                </td>
+                              <% }); %>
+                            </tr>
+                          <% }); %>
+                        <% } %>
+                      </tbody>
+                    </table>
+                  </div>
+                  <script>
+                  document.addEventListener('DOMContentLoaded', function() {
+                    document.querySelectorAll('tr[data-href]').forEach(function(tr) {
+                      tr.addEventListener('click', function(e) {
+                        if (e.target.closest('a, button')) return;
+                        window.location.href = tr.dataset.href;
+                      });
+                    });
+                  });
+                  </script>
+
+                  <% if (result.totalPages > 1) { %>
+                    <% const prevUrl = new URLSearchParams(Object.assign({}, query, { page: result.page - 1 })).toString(); %>
+                    <% const nextUrl = new URLSearchParams(Object.assign({}, query, { page: result.page + 1 })).toString(); %>
+                    <div class="d-flex align-items-center justify-content-between mt-3 pt-3 border-top">
+                      <div class="text-muted small">Showing <%= (result.page - 1) * result.pageSize + 1 %>–<%= Math.min(result.page * result.pageSize, result.total) %> of <%= result.total %></div>
+                      <nav>
+                        <ul class="pagination pagination-sm mb-0">
+                          <li class="page-item <%= result.page <= 1 ? 'disabled' : '' %>"><a class="page-link" href="?<%= prevUrl %>"><i class="bx bx-chevron-left"></i></a></li>
+                          <% for (let p = 1; p <= result.totalPages; p++) { %>
+                            <% const pageUrl = new URLSearchParams(Object.assign({}, query, { page: p })).toString(); %>
+                            <li class="page-item <%= p === result.page ? 'active' : '' %>"><a class="page-link" href="?<%= pageUrl %>"><%= p %></a></li>
+                          <% } %>
+                          <li class="page-item <%= result.page >= result.totalPages ? 'disabled' : '' %>"><a class="page-link" href="?<%= nextUrl %>"><i class="bx bx-chevron-right"></i></a></li>
+                        </ul>
+                      </nav>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <%- include('../../partials/footer') %>
+    </div>
+  </div>
+  <%- include('../../partials/scripts', { pageScripts: [] }) %>
+</body>
+</html>

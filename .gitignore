@@ -20,3 +20,6 @@ Thumbs.db
 # build output (future-proofing)
 dist/
 build/
+
+# HTML files (project uses EJS templates in views/; not static HTML)
+*.html

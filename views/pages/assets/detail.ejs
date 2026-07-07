@@ -1,0 +1,265 @@
+<%- include('../../partials/head', { title: title }) %>
+
+<body>
+  <div id="layout-wrapper">
+    <%- include('../../partials/topbar') %>
+    <%- include('../../partials/sidebar') %>
+
+    <div class="main-content">
+      <div class="page-content">
+        <div class="container-fluid">
+
+          <!-- Header card -->
+          <div class="row">
+            <div class="col-12">
+              <div class="page-title-box d-sm-flex align-items-center justify-content-between">
+                <h4 class="mb-sm-0 font-size-18">
+                  <%= asset.name %>
+                  <% const sc = { IN_STOCK:'success', ASSIGNED:'primary', IN_REPAIR:'warning', RETIRED:'secondary', LOST:'danger' }[asset.status]; %>
+                  <span class="badge bg-<%= sc %> ms-2 align-middle"><%= asset.status.replace(/_/g, ' ') %></span>
+                </h4>
+                <div class="page-title-right">
+                  <% const detailBreadcrumb = [{ label: 'Home',   href: '/' },{ label: 'Assets', href: '/assets' },{ label: asset.name, href: null }]; %>
+                  <%- include('../../partials/breadcrumb', { items: detailBreadcrumb }) %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Action bar -->
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-body py-3">
+                  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div>
+                      <span class="text-muted me-2">Tag:</span>
+                      <code class="fs-6"><%= asset.assetTag %></code>
+                      <% if (asset.serialNumber) { %>
+                        <span class="text-muted ms-3 me-2">Serial:</span>
+                        <code><%= asset.serialNumber %></code>
+                      <% } %>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                      <a href="/assets/<%= asset.id %>/edit" class="btn btn-soft-secondary">
+                        <i class="bx bx-edit me-1"></i>Edit
+                      </a>
+                      <% if (asset.status !== 'RETIRED' && asset.status !== 'LOST') { %>
+                        <button type="button" class="btn btn-soft-primary" data-bs-toggle="modal" data-bs-target="#assignAssetModal">
+                          <i class="bx bx-user-plus me-1"></i>Assign
+                        </button>
+                      <% } %>
+                      <% if (asset.status !== 'RETIRED') { %>
+                        <button type="button" class="btn btn-soft-danger" data-bs-toggle="modal" data-bs-target="#retireAssetModal">
+                          <i class="bx bx-archive me-1"></i>Retire
+                        </button>
+                      <% } %>
+                      <a href="/assets/<%= asset.id %>/qr" target="_blank" class="btn btn-soft-info">
+                        <i class="bx bx-qr me-1"></i>Print QR
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-body">
+                  <ul class="nav nav-tabs nav-tabs-custom" role="tablist">
+                    <li class="nav-item">
+                      <a class="nav-link active" data-bs-toggle="tab" href="#tab-overview" role="tab">
+                        <i class="bx bx-info-circle me-1"></i>Overview
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a class="nav-link" data-bs-toggle="tab" href="#tab-specs" role="tab">
+                        <i class="bx bx-list-ul me-1"></i>Specs
+                        <% if (asset.attributes && Object.keys(asset.attributes).length) { %>
+                          <span class="badge bg-soft-primary text-primary ms-1"><%= Object.keys(asset.attributes).length %></span>
+                        <% } %>
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a class="nav-link" data-bs-toggle="tab" href="#tab-assignments" role="tab">
+                        <i class="bx bx-user me-1"></i>Assignments
+                        <% if (assignments && assignments.length) { %>
+                          <span class="badge bg-soft-primary text-primary ms-1"><%= assignments.length %></span>
+                        <% } %>
+                      </a>
+                    </li>
+                    <li class="nav-item">
+                      <a class="nav-link" data-bs-toggle="tab" href="#tab-maintenance" role="tab">
+                        <i class="bx bx-wrench me-1"></i>Maintenance
+                        <% if (maintenance && maintenance.length) { %>
+                          <span class="badge bg-soft-primary text-primary ms-1"><%= maintenance.length %></span>
+                        <% } %>
+                      </a>
+                    </li>
+                  </ul>
+
+                  <div class="tab-content pt-4">
+
+                    <!-- OVERVIEW TAB -->
+                    <div class="tab-pane active" id="tab-overview" role="tabpanel">
+                      <div class="row">
+                        <div class="col-md-6">
+                          <h6 class="text-muted text-uppercase fs-12 mb-3">Identification</h6>
+                          <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted fw-normal">Tag</dt>           <dd class="col-sm-8"><code><%= asset.assetTag %></code></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Name</dt>          <dd class="col-sm-8"><%= asset.name %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Category</dt>      <dd class="col-sm-8"><%= asset.category ? asset.category.name : '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Condition</dt>     <dd class="col-sm-8"><%= asset.condition ? asset.condition.replace(/_/g, ' ') : '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Manufacturer</dt>  <dd class="col-sm-8"><%= asset.manufacturer || '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Model</dt>         <dd class="col-sm-8"><%= asset.model || '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Serial</dt>        <dd class="col-sm-8"><code><%= asset.serialNumber || '—' %></code></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">MAC</dt>           <dd class="col-sm-8"><code><%= asset.macAddress || '—' %></code></dd>
+                          </dl>
+                        </div>
+                        <div class="col-md-6">
+                          <h6 class="text-muted text-uppercase fs-12 mb-3">Purchase &amp; ownership</h6>
+                          <dl class="row mb-0">
+                            <dt class="col-sm-4 text-muted fw-normal">Vendor</dt>           <dd class="col-sm-8"><%= asset.vendor ? asset.vendor.name : '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Location</dt>         <dd class="col-sm-8"><%= asset.location ? asset.location.name : '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Assigned to</dt>      <dd class="col-sm-8"><%- asset.assignedTo ? asset.assignedTo.fullName : '<span class="text-muted">— unassigned —</span>' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Purchase date</dt>    <dd class="col-sm-8"><%= asset.purchaseDate || '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Cost</dt>             <dd class="col-sm-8"><%= asset.purchaseCost ? asset.purchaseCost.toFixed(2) + ' ' + asset.purchaseCurrency : '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">PO #</dt>             <dd class="col-sm-8"><%= asset.purchaseOrderNumber || '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Warranty</dt>         <dd class="col-sm-8"><%= asset.warrantyExpiresAt || '—' %></dd>
+                            <dt class="col-sm-4 text-muted fw-normal">Depreciation</dt>    <dd class="col-sm-8"><%= asset.depreciationMonths ? asset.depreciationMonths + ' months' : '—' %></dd>
+                          </dl>
+                        </div>
+                      </div>
+                      <% if (asset.notes) { %>
+                        <hr>
+                        <h6 class="text-muted text-uppercase fs-12 mb-2">Notes</h6>
+                        <p class="mb-0"><%= asset.notes %></p>
+                      <% } %>
+                    </div>
+
+                    <!-- SPECS TAB -->
+                    <div class="tab-pane" id="tab-specs" role="tabpanel">
+                      <% if (asset.attributes && Object.keys(asset.attributes).length) { %>
+                        <div class="table-responsive">
+                          <table class="table table-nowrap mb-0">
+                            <thead class="table-light">
+                              <tr><th style="width: 30%">Key</th><th>Value</th></tr>
+                            </thead>
+                            <tbody>
+                              <% Object.entries(asset.attributes || {}).forEach(function(entry) { %>
+                                <tr>
+                                  <td><code class="text-muted"><%= entry[0] %></code></td>
+                                  <td><%= entry[1] %></td>
+                                </tr>
+                              <% }); %>
+                            </tbody>
+                          </table>
+                        </div>
+                      <% } else { %>
+                        <%- include('../../partials/empty-state', { icon: 'bx-list-ul', title: 'No specs recorded', message: 'Specs are stored as JSONB so you can capture category-specific fields (cpu, ram_gb, size_in, etc.).' }) %>
+                      <% } %>
+                    </div>
+
+                    <!-- ASSIGNMENTS TAB -->
+                    <div class="tab-pane" id="tab-assignments" role="tabpanel">
+                      <% if (assignments && assignments.length) { %>
+                        <div class="table-responsive">
+                          <table class="table table-nowrap align-middle mb-0">
+                            <thead class="table-light">
+                              <tr>
+                                <th>User</th>
+                                <th>Assigned</th>
+                                <th>Expected return</th>
+                                <th>Returned</th>
+                                <th>Notes</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <% assignments.forEach(function(a) { %>
+                                <tr>
+                                  <td><strong><%= a.user ? a.user.fullName : '—' %></strong></td>
+                                  <td><%= a.assignedAt ? new Date(a.assignedAt).toLocaleDateString() : '—' %></td>
+                                  <td><%- a.expectedReturnAt ? new Date(a.expectedReturnAt).toLocaleDateString() : '<span class="text-muted">—</span>' %></td>
+                                  <td>
+                                    <% if (a.returnedAt) { %>
+                                      <span class="badge bg-success"><%= new Date(a.returnedAt).toLocaleDateString() %></span>
+                                    <% } else { %>
+                                      <span class="badge bg-primary">Active</span>
+                                    <% } %>
+                                  </td>
+                                  <td class="text-muted small"><%= a.notes || '' %></td>
+                                </tr>
+                              <% }); %>
+                            </tbody>
+                          </table>
+                        </div>
+                      <% } else { %>
+                        <%- include('../../partials/empty-state', { icon: 'bx-user', title: 'No assignments yet', message: 'This asset has never been assigned to a user.' }) %>
+                      <% } %>
+                    </div>
+
+                    <!-- MAINTENANCE TAB -->
+                    <div class="tab-pane" id="tab-maintenance" role="tabpanel">
+                      <% if (maintenance && maintenance.length) { %>
+                        <div class="table-responsive">
+                          <table class="table table-nowrap align-middle mb-0">
+                            <thead class="table-light">
+                              <tr>
+                                <th>Type</th>
+                                <th>Description</th>
+                                <th>Vendor</th>
+                                <th>Cost</th>
+                                <th>Started</th>
+                                <th>Completed</th>
+                                <th>Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <% maintenance.forEach(function(m) { %>
+                                <tr>
+                                  <td><span class="badge bg-info"><%= m.type.replace(/_/g, ' ') %></span></td>
+                                  <td><%= m.description %></td>
+                                  <td><%= m.vendor ? m.vendor.name : '—' %></td>
+                                  <td><%= m.cost ? m.cost.toFixed(2) + ' ' + m.currency : '—' %></td>
+                                  <td><%= m.startedAt ? new Date(m.startedAt).toLocaleDateString() : '—' %></td>
+                                  <td><%= m.completedAt ? new Date(m.completedAt).toLocaleDateString() : '—' %></td>
+                                  <td>
+                                    <% const mc = { COMPLETED:'success', IN_PROGRESS:'primary', CANCELLED:'secondary' }[m.status] || 'secondary'; %>
+                                    <span class="badge bg-<%= mc %>"><%= m.status.replace(/_/g, ' ') %></span>
+                                  </td>
+                                </tr>
+                              <% }); %>
+                            </tbody>
+                          </table>
+                        </div>
+                      <% } else { %>
+                        <%- include('../../partials/empty-state', { icon: 'bx-wrench', title: 'No maintenance records', message: 'No repairs, preventive work, or decommission records yet.' }) %>
+                      <% } %>
+                    </div>
+
+                  </div><!-- /tab-content -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <%- include('../../partials/footer') %>
+    </div>
+  </div>
+
+  <%# Only mount modals whose trigger button is visible, to avoid dead DOM. %>
+  <% if (asset.status !== 'RETIRED' && asset.status !== 'LOST') { %>
+    <%- include('../../partials/modals/assign-asset', { asset: asset, users: users }) %>
+  <% } %>
+  <% if (asset.status !== 'RETIRED') { %>
+    <%- include('../../partials/modals/retire-asset', { asset: asset }) %>
+  <% } %>
+
+  <%- include('../../partials/scripts', { pageScripts: [] }) %>
+</body>
+</html>

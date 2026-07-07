@@ -1,0 +1,20 @@
+<!--
+  views/partials/empty-state.ejs
+  Centered empty-state card.
+  Usage: include('../partials/empty-state', { ... })  -- EJS tags omitted in this doc comment so
+  EJS doesn't try to evaluate them at render time. icon / title / message are required.
+  actionLabel / actionHref are optional (the "primary action" button is shown only when both are present;
+  access them in the partial via locals.X to avoid ReferenceError when the caller omits them).
+-->
+<div class="card">
+  <div class="card-body text-center py-5">
+    <i class="bx <%= icon || 'bx-inbox' %> display-1 text-muted"></i>
+    <h5 class="mt-3 mb-1"><%= title || 'Nothing here yet' %></h5>
+    <p class="text-muted mb-3"><%= message %></p>
+    <% if (locals.actionLabel && locals.actionHref) { %>
+      <a href="<%= locals.actionHref %>" class="btn btn-primary">
+        <i class="bx bx-plus me-1"></i><%= locals.actionLabel %>
+      </a>
+    <% } %>
+  </div>
+</div>

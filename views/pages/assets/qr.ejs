@@ -1,0 +1,92 @@
+<%- include('../../partials/head', { title: title }) %>
+
+<body class="bg-white">
+  <div class="container py-4">
+
+    <!-- Action bar (hidden when printing) -->
+    <div class="d-flex justify-content-end mb-3 no-print">
+      <button onclick="window.print()" class="btn btn-primary">
+        <i class="bx bx-printer me-1"></i>Print
+      </button>
+      <a href="/assets/<%= asset.id %>" class="btn btn-light ms-2">
+        <i class="bx bx-x me-1"></i>Close
+      </a>
+    </div>
+
+    <!-- QR label (one asset per page when printed) -->
+    <div class="card qr-label">
+      <div class="card-body text-center py-5">
+        <!--
+          QR code placeholder. Phase 2 will swap this for a real QR via a
+          server-side lib (e.g. `qrcode` npm) or a client-side lib
+          (e.g. qrcodejs) — both keyed on the asset.assetTag + asset.id.
+        -->
+        <div class="qr-placeholder mx-auto mb-4 d-flex align-items-center justify-content-center"
+             style="width: 220px; height: 220px; border: 2px dashed #adb5bd; background: #f8f9fa;">
+          <div class="text-center text-muted">
+            <i class="bx bx-qr display-3 d-block"></i>
+            <small>QR code<br>(asset.id = <code class="small"><%= asset.id %></code>)</small>
+          </div>
+        </div>
+
+        <h2 class="mb-1"><code><%= asset.assetTag %></code></h2>
+        <p class="fs-5 mb-3"><strong><%= asset.name %></strong></p>
+
+        <table class="table table-sm table-borderless mb-0 mx-auto" style="max-width: 360px;">
+          <tbody>
+            <% if (asset.category) { %>
+              <tr>
+                <td class="text-muted text-end" style="width: 50%">Category</td>
+                <td class="text-start"><%= asset.category.name %></td>
+              </tr>
+            <% } %>
+            <% if (asset.serialNumber) { %>
+              <tr>
+                <td class="text-muted text-end">Serial</td>
+                <td class="text-start"><code><%= asset.serialNumber %></code></td>
+              </tr>
+            <% } %>
+            <% if (asset.vendor) { %>
+              <tr>
+                <td class="text-muted text-end">Vendor</td>
+                <td class="text-start"><%= asset.vendor.name %></td>
+              </tr>
+            <% } %>
+            <% if (asset.purchaseDate) { %>
+              <tr>
+                <td class="text-muted text-end">Purchased</td>
+                <td class="text-start"><%= asset.purchaseDate %></td>
+              </tr>
+            <% } %>
+            <% if (asset.warrantyExpiresAt) { %>
+              <tr>
+                <td class="text-muted text-end">Warranty</td>
+                <td class="text-start">until <%= asset.warrantyExpiresAt %></td>
+              </tr>
+            <% } %>
+            <% if (asset.assignedTo) { %>
+              <tr>
+                <td class="text-muted text-end">Assigned to</td>
+                <td class="text-start"><strong><%= asset.assignedTo.fullName %></strong></td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <style>
+    /* Print: A4, hide chrome, maximize the label. */
+    @media print {
+      body { background: white !important; }
+      .no-print { display: none !important; }
+      .container { max-width: 100% !important; padding: 0 !important; }
+      .qr-label { border: 1px solid #000 !important; box-shadow: none !important; page-break-inside: avoid; }
+      .qr-placeholder { border-color: #000 !important; background: white !important; }
+      @page { size: A4; margin: 1.5cm; }
+    }
+  </style>
+</body>
+</html>

@@ -84,6 +84,77 @@ app.get('/:page.html', (req, res, next) => {
 });
 
 // ----------------------------------------------------------------------
+// Asset routes (Phase 1 of the IT inventory UI). mockData.js returns objects
+// shaped exactly like Prisma will return in Phase 6, so the route handlers
+// can swap from `mockData.getAssets(...)` to `prisma.asset.findMany(...)`
+// with no EJS changes.
+// ----------------------------------------------------------------------
+const mockData = require('./views/lib/mockData');
+
+app.get('/assets', (req, res) => {
+  const result = mockData.getAssets({
+    status:       req.query.status       || undefined,
+    categoryId:   req.query.categoryId   || undefined,
+    locationId:   req.query.locationId   || undefined,
+    vendorId:     req.query.vendorId     || undefined,
+    assignedOnly: req.query.assignedOnly === '1',
+    search:       req.query.search       || undefined,
+    page:         Number(req.query.page)  || 1,
+  });
+  res.render('pages/assets/index', {
+    title:      TITLES['assets'] || 'Assets',
+    query:      req.query,
+    result:     result,
+    assetsAll:  mockData.getAssets(),
+    categories: mockData.getCategories(),
+    locations:  mockData.getLocations(),
+    vendors:    mockData.getVendors(),
+  });
+});
+
+app.get('/assets/new', (_req, res) => {
+  res.render('pages/assets/new', {
+    title:      TITLES['assets/new'] || 'New Asset',
+    categories: mockData.getCategories(),
+    vendors:    mockData.getVendors(),
+    locations:  mockData.getLocations(),
+  });
+});
+
+app.get('/assets/:id', (req, res, next) => {
+  const asset = mockData.getAssetById(req.params.id);
+  if (!asset) return next();
+  res.render('pages/assets/detail', {
+    title:       asset.name,
+    asset:       asset,
+    assignments: mockData.getAssignmentsForAsset(asset.id),
+    maintenance: mockData.getMaintenanceForAsset(asset.id),
+    users:       mockData.getUsers(),
+  });
+});
+
+app.get('/assets/:id/edit', (req, res, next) => {
+  const asset = mockData.getAssetById(req.params.id);
+  if (!asset) return next();
+  res.render('pages/assets/edit', {
+    title:      'Edit ' + asset.name,
+    asset:      asset,
+    categories: mockData.getCategories(),
+    vendors:    mockData.getVendors(),
+    locations:  mockData.getLocations(),
+  });
+});
+
+app.get('/assets/:id/qr', (req, res, next) => {
+  const asset = mockData.getAssetById(req.params.id);
+  if (!asset) return next();
+  res.render('pages/assets/qr', {
+    title: 'Print QR - ' + asset.name,
+    asset: asset,
+  });
+});
+
+// ----------------------------------------------------------------------
 // Static assets — every other file in the project root (assets/, fonts.*/,
 // _DataURI/, docs/, prisma/, server.js, package.json, etc.). We do NOT
 // serve *.html here; the EJS routes above own those URLs.

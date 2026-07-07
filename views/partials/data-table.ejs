@@ -1,0 +1,96 @@
+<%# views/partials/data-table.ejs
+   Generic Minia-styled table.
+
+   Usage (note: replace the arrow markers below with the real tag chars
+   when you actually paste this into a template — EJS comments cannot
+   contain literal EJS tag delimiters or the comment ends early):
+     <example-block>
+       include('../partials/data-table', {
+         id: 'assets-table',
+         columns: [
+           { key: 'assetTag', label: 'Tag' },
+           { key: 'name',     label: 'Name' },
+           { key: 'status',   label: 'Status', badge: true },
+         ],
+         rows: assets,
+         emptyMessage: 'No assets yet.',
+         rowUrl: function(a) { return '/assets/' + a.id; },
+       })
+     </example-block>
+
+   Column options:
+     key      - dotted path into the row (e.g. 'category.name')
+     label    - header text
+     badge    - render the value as a colored badge (status-keyed color map)
+     render   - optional function(row) returning raw HTML for the cell
+     align    - 'start' | 'center' | 'end' (default: start)
+%>
+<%
+  // Color map for status-style badges. Add more keys here as new enums appear.
+  const badgeColor = function(val) {
+    if (val === 'IN_STOCK' || val === 'ACTIVE'   || val === 'COMPLETED'   || val === 'APPROVED')  return 'success';
+    if (val === 'ASSIGNED' || val === 'IN_PROGRESS' || val === 'PENDING')                       return 'primary';
+    if (val === 'IN_REPAIR'|| val === 'WARNING'  || val === 'DRAFT')                          return 'warning';
+    if (val === 'RETIRED'  || val === 'INACTIVE' || val === 'DISABLED')                        return 'secondary';
+    if (val === 'LOST'     || val === 'OVERDUE'  || val === 'REJECTED' || val === 'DAMAGED')   return 'danger';
+    return 'info';
+  };
+  const getVal = function(obj, dottedKey) {
+    return dottedKey.split('.').reduce(function(o, k) { return o == null ? undefined : o[k]; }, obj);
+  };
+%>
+<div class="table-responsive">
+  <table id="<%= id %>" class="table table-nowrap align-middle mb-0">
+    <thead class="table-light">
+      <tr>
+        <% columns.forEach(function(col) { %>
+          <th class="<%= col.align ? 'text-' + col.align : '' %>"><%= col.label %></th>
+        <% }); %>
+      </tr>
+    </thead>
+    <tbody>
+      <% if (!rows || rows.length === 0) { %>
+        <tr>
+          <td colspan="<%= columns.length %>" class="text-center text-muted py-4">
+            <%= emptyMessage || 'No records to display.' %>
+          </td>
+        </tr>
+      <% } else { %>
+        <% rows.forEach(function(row) { %>
+          <tr <%= rowUrl ? 'data-href="' + rowUrl(row) + '" style="cursor:pointer"' : '' %>>
+            <% columns.forEach(function(col) { %>
+              <td class="<%= col.align ? 'text-' + col.align : '' %>">
+                <% if (typeof col.render === 'function') { %>
+                  <%- col.render(row) %>
+                <% } else if (col.badge) { %>
+                  <span class="badge bg-<%= badgeColor(row[col.key]) %>">
+                    <%= String(row[col.key] || '').replace(/_/g, ' ') %>
+                  </span>
+                <% } else {
+                  var v = getVal(row, col.key);
+                %>
+                  <%= v == null ? '—' : v %>
+                <% } %>
+              </td>
+            <% }); %>
+          </tr>
+        <% }); %>
+      <% } %>
+    </tbody>
+  </table>
+</div>
+
+<%# Row click handler. Always emitted; no-op when no tr[data-href] exists
+    (i.e. when rowUrl was not passed). Kept outside any conditional block
+    because EJS would otherwise try to parse the script content as JS. %>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('tr[data-href]').forEach(function(tr) {
+    tr.addEventListener('click', function(e) {
+      // Don't follow the row when a button/link inside the row was clicked
+      if (e.target.closest('a, button')) return;
+      window.location.href = tr.dataset.href;
+    });
+  });
+});
+</script>

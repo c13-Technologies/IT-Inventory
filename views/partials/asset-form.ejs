@@ -1,0 +1,253 @@
+<%# views/partials/asset-form.ejs
+   Shared form for create + edit. Pass {asset, categories, vendors, locations, mode}.
+   `mode` is 'new' or 'edit'. `asset` is null for 'new' and the asset for 'edit'.
+
+   Usage (note: replace the arrow markers below with the real tag chars
+   when you actually paste this into a template — EJS comments cannot
+   contain literal EJS tag delimiters or the comment ends early):
+     <example-block>
+       include('../partials/asset-form', {
+         asset: asset,                // null for new
+         categories: categories,
+         vendors: vendors,
+         locations: locations,
+         mode: 'new'                  // or 'edit'
+       })
+     </example-block>
+%>
+<%
+  const a = asset || {};
+  const a_attrs = a.attributes || {};
+  const a_attrKeys = Object.keys(a_attrs);
+  const isEdit = mode === 'edit';
+  const action = isEdit ? '/assets/' + a.id : '/assets';
+%>
+
+<form method="POST" action="<%= action %>" id="assetForm">
+
+  <!-- ============================== SECTION 1: BASIC ============================== -->
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title mb-3">
+        <i class="bx bx-info-circle me-1 text-primary"></i>Basic information
+      </h5>
+      <div class="row g-3">
+        <div class="col-md-7">
+          <label class="form-label">Name <span class="text-danger">*</span></label>
+          <input type="text" name="name" class="form-control" required value="<%= a.name || '' %>" placeholder="e.g. MacBook Pro 16&quot; M3 Max">
+        </div>
+        <div class="col-md-5">
+          <label class="form-label">Asset tag <span class="text-danger">*</span></label>
+          <input type="text" name="assetTag" class="form-control" required value="<%= a.assetTag || '' %>" placeholder="e.g. IT-0009" pattern="[A-Za-z0-9\-]+" title="Letters, digits, and dashes only">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Description</label>
+          <textarea name="description" class="form-control" rows="2" placeholder="Brief description (optional)"><%= a.description || '' %></textarea>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Category <span class="text-danger">*</span></label>
+          <select name="categoryId" class="form-select" required>
+            <option value="">— Select —</option>
+            <% categories.forEach(function(c) { %>
+              <option value="<%= c.id %>" <%= a.categoryId === c.id ? 'selected' : '' %>><%= c.name %></option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Condition</label>
+          <select name="condition" class="form-select">
+            <option value="">—</option>
+            <% ['NEW', 'GOOD', 'FAIR', 'DAMAGED', 'NEEDS_REPAIR'].forEach(function(v) { %>
+              <option value="<%= v %>" <%= a.condition === v ? 'selected' : '' %>><%= v.replace(/_/g, ' ') %></option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Status <span class="text-muted small">(read-only on edit)</span></label>
+          <input type="text" class="form-control" value="<%= a.status ? a.status.replace(/_/g, ' ') : 'IN_STOCK' %>" disabled>
+          <input type="hidden" name="status" value="<%= a.status || 'IN_STOCK' %>">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Manufacturer</label>
+          <input type="text" name="manufacturer" class="form-control" value="<%= a.manufacturer || '' %>">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Model</label>
+          <input type="text" name="model" class="form-control" value="<%= a.model || '' %>">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Serial number</label>
+          <input type="text" name="serialNumber" class="form-control" value="<%= a.serialNumber || '' %>">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">MAC address</label>
+          <input type="text" name="macAddress" class="form-control" value="<%= a.macAddress || '' %>" pattern="^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$" placeholder="AA:BB:CC:DD:EE:FF">
+        </div>
+        <div class="col-12">
+          <label class="form-label">Notes</label>
+          <textarea name="notes" class="form-control" rows="2"><%= a.notes || '' %></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 2: PURCHASE ============================== -->
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title mb-3">
+        <i class="bx bx-purchase-tag me-1 text-primary"></i>Purchase &amp; warranty
+      </h5>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Vendor</label>
+          <select name="vendorId" class="form-select">
+            <option value="">— None —</option>
+            <% vendors.forEach(function(v) { %>
+              <option value="<%= v.id %>" <%= a.vendorId === v.id ? 'selected' : '' %>><%= v.name %></option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">PO number</label>
+          <input type="text" name="purchaseOrderNumber" class="form-control" value="<%= a.purchaseOrderNumber || '' %>" placeholder="e.g. PO-2025-0123">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Purchase date</label>
+          <input type="date" name="purchaseDate" class="form-control" value="<%= a.purchaseDate || '' %>">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Cost</label>
+          <input type="number" name="purchaseCost" class="form-control" step="0.01" min="0" value="<%= a.purchaseCost != null ? a.purchaseCost : '' %>">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Currency</label>
+          <select name="purchaseCurrency" class="form-select">
+            <% ['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'INR'].forEach(function(v) { %>
+              <option value="<%= v %>" <%= (a.purchaseCurrency || 'USD') === v ? 'selected' : '' %>><%= v %></option>
+            <% }); %>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Depreciation (months)</label>
+          <input type="number" name="depreciationMonths" class="form-control" min="0" value="<%= a.depreciationMonths != null ? a.depreciationMonths : 36 %>">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Warranty expires</label>
+          <input type="date" name="warrantyExpiresAt" class="form-control" value="<%= a.warrantyExpiresAt || '' %>">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 3: LOCATION ============================== -->
+  <div class="card">
+    <div class="card-body">
+      <h5 class="card-title mb-3">
+        <i class="bx bx-map me-1 text-primary"></i>Location
+      </h5>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Current location <span class="text-muted small">(use Assign modal to give to a user)</span></label>
+          <select name="locationId" class="form-select">
+            <option value="">— None —</option>
+            <% locations.forEach(function(l) { %>
+              <option value="<%= l.id %>" <%= a.locationId === l.id ? 'selected' : '' %>><%= l.name %></option>
+            <% }); %>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== SECTION 4: SPECS (JSONB) ============================== -->
+  <div class="card">
+    <div class="card-body">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h5 class="card-title mb-0">
+          <i class="bx bx-list-ul me-1 text-primary"></i>Specs
+          <span class="text-muted fs-13 fw-normal">(JSONB — category-specific fields)</span>
+        </h5>
+        <button type="button" class="btn btn-sm btn-soft-primary" id="addSpecRow">
+          <i class="bx bx-plus me-1"></i>Add field
+        </button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-nowrap align-middle mb-0" id="specsTable">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 35%">Key</th>
+              <th>Value</th>
+              <th style="width: 50px"></th>
+            </tr>
+          </thead>
+          <tbody id="specsBody">
+            <% if (a_attrKeys.length === 0) { %>
+              <tr class="spec-row">
+                <td><input type="text" name="attrKeys[]" class="form-control form-control-sm" placeholder="e.g. cpu"></td>
+                <td><input type="text" name="attrVals[]" class="form-control form-control-sm" placeholder="e.g. M3 Max"></td>
+                <td><button type="button" class="btn btn-sm btn-soft-danger remove-spec"><i class="bx bx-trash"></i></button></td>
+              </tr>
+            <% } else { %>
+              <% a_attrKeys.forEach(function(k) { %>
+                <tr class="spec-row">
+                  <td><input type="text" name="attrKeys[]" class="form-control form-control-sm" value="<%= k %>"></td>
+                  <td><input type="text" name="attrVals[]" class="form-control form-control-sm" value="<%= a_attrs[k] %>"></td>
+                  <td><button type="button" class="btn btn-sm btn-soft-danger remove-spec"><i class="bx bx-trash"></i></button></td>
+                </tr>
+              <% }); %>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-muted small mt-2 mb-0">
+        <i class="bx bx-info-circle me-1"></i>
+        Common keys for laptops: <code>cpu</code>, <code>ram_gb</code>, <code>storage_gb</code>, <code>screen_in</code>. For monitors: <code>size_in</code>, <code>panel</code>, <code>refresh_hz</code>.
+      </p>
+    </div>
+  </div>
+
+  <!-- ============================== SUBMIT ============================== -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body d-flex justify-content-between align-items-center">
+          <a href="<%= isEdit ? '/assets/' + a.id : '/assets' %>" class="btn btn-light">
+            <i class="bx bx-x me-1"></i>Cancel
+          </a>
+          <button type="submit" class="btn btn-primary">
+            <i class="bx bx-save me-1"></i><%= isEdit ? 'Save changes' : 'Create asset' %>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Add / remove spec rows
+  function attachRemove(btn) {
+    btn.addEventListener('click', function() {
+      var tbody = document.getElementById('specsBody');
+      if (tbody.querySelectorAll('.spec-row').length > 1) {
+        btn.closest('tr').remove();
+      } else {
+        // Last row — just clear the inputs
+        btn.closest('tr').querySelectorAll('input').forEach(function(i) { i.value = ''; });
+      }
+    });
+  }
+  document.querySelectorAll('.remove-spec').forEach(attachRemove);
+  document.getElementById('addSpecRow').addEventListener('click', function() {
+    var tbody = document.getElementById('specsBody');
+    var tr = document.createElement('tr');
+    tr.className = 'spec-row';
+    tr.innerHTML =
+      '<td><input type="text" name="attrKeys[]" class="form-control form-control-sm" placeholder="e.g. cpu"></td>' +
+      '<td><input type="text" name="attrVals[]" class="form-control form-control-sm" placeholder="e.g. M3 Max"></td>' +
+      '<td><button type="button" class="btn btn-sm btn-soft-danger remove-spec"><i class="bx bx-trash"></i></button></td>';
+    tbody.appendChild(tr);
+    attachRemove(tr.querySelector('.remove-spec'));
+  });
+});
+</script>
