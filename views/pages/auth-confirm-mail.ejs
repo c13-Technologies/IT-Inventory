@@ -1,27 +1,4 @@
-<!doctype html>
-<html lang="en">
-
-<head>
-
-    <meta charset="utf-8" />
-    <title>Recover Password | Minia - Minimal Admin & Dashboard Template</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta content="Premium Multipurpose Admin & Dashboard Template" name="description" />
-    <meta content="Themesbrand" name="author" />
-    <!-- App favicon -->
-    <link rel="shortcut icon" href="assets/images/favicon.ico">
-
-    <!-- preloader css -->
-    <link rel="stylesheet" href="assets/css/preloader.min.css" type="text/css" />
-
-    <!-- Bootstrap Css -->
-    <link href="assets/css/bootstrap.min.css" id="bootstrap-style" rel="stylesheet" type="text/css" />
-    <!-- Icons Css -->
-    <link href="assets/css/icons.min.css" rel="stylesheet" type="text/css" />
-    <!-- App Css-->
-    <link href="assets/css/app.min.css" id="app-style" rel="stylesheet" type="text/css" />
-
-</head>
+<%- include('../partials/head', { title: "Confirm Mail" }) %>
 
 <body>
 
@@ -40,24 +17,18 @@
                                 </div>
                                 <div class="auth-content my-auto">
                                     <div class="text-center">
-                                        <h5 class="mb-0">Reset Password</h5>
-                                        <p class="text-muted mt-2">Reset Password with C13.</p>
-                                    </div>
-                                    <div class="alert alert-success text-center my-4" role="alert">
-                                        Enter your Email and instructions will be sent to you!
-                                    </div>
-                                    <form class="mt-4" action="index.html">
-                                        <div class="mb-3">
-                                            <label class="form-label">Email</label>
-                                            <input type="text" class="form-control" id="email" placeholder="Enter email">
+                                        <div class="avatar-lg mx-auto">
+                                            <div class="avatar-title rounded-circle bg-light">
+                                                <i class="bx bx-mail-send h2 mb-0 text-primary"></i>
+                                            </div>
                                         </div>
-                                        <div class="mb-3 mt-4">
-                                            <button class="btn btn-primary w-100 waves-effect waves-light" type="submit">Reset</button>
+                                        <div class="p-2 mt-4">
+                                            <h4>Success !</h4>
+                                            <p class="text-muted">At vero eos et accusamus et iusto odio dignissimos ducimus qui blanditiis praesentium voluptatum deleniti atque corrupti quos dolores et</p>
+                                            <div class="mt-4">
+                                                <a href="index.html" class="btn btn-primary w-100">Back to Home</a>
+                                            </div>
                                         </div>
-                                    </form>
-
-                                    <div class="mt-5 text-center">
-                                        <p class="text-muted mb-0">Remember It ? <a href="auth-login.html" class="text-primary fw-semibold"> Sign In </a> </p>
                                     </div>
                                 </div>
                                 <div class="mt-4 mt-md-5 text-center">
@@ -176,14 +147,7 @@
 
 
     <!-- JAVASCRIPT -->
-    <script src="assets/libs/jquery/jquery.min.js"></script>
-    <script src="assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/libs/metismenu/metisMenu.min.js"></script>
-    <script src="assets/libs/simplebar/simplebar.min.js"></script>
-    <script src="assets/libs/node-waves/waves.min.js"></script>
-    <script src="assets/libs/feather-icons/feather.min.js"></script>
-    <!-- pace js -->
-    <script src="assets/libs/pace-js/pace.min.js"></script>
+    <script src="<%- include('../partials/scripts-auth', { pageScripts: [] }) %>
 
 </body>
 

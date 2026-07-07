@@ -1,27 +1,4 @@
-<!doctype html>
-<html lang="en">
-
-<head>
-
-    <meta charset="utf-8" />
-    <title>Register | Minia - Minimal Admin & Dashboard Template</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta content="Premium Multipurpose Admin & Dashboard Template" name="description" />
-    <meta content="Themesbrand" name="author" />
-    <!-- App favicon -->
-    <link rel="shortcut icon" href="assets/images/favicon.ico">
-
-    <!-- preloader css -->
-    <link rel="stylesheet" href="assets/css/preloader.min.css" type="text/css" />
-
-    <!-- Bootstrap Css -->
-    <link href="assets/css/bootstrap.min.css" id="bootstrap-style" rel="stylesheet" type="text/css" />
-    <!-- Icons Css -->
-    <link href="assets/css/icons.min.css" rel="stylesheet" type="text/css" />
-    <!-- App Css-->
-    <link href="assets/css/app.min.css" id="app-style" rel="stylesheet" type="text/css" />
-
-</head>
+<%- include('../partials/head', { title: "Login" }) %>
 
 <body>
 
@@ -40,44 +17,50 @@
                                 </div>
                                 <div class="auth-content my-auto">
                                     <div class="text-center">
-                                        <h5 class="mb-0">Register Account</h5>
-                                        <p class="text-muted mt-2">Get your free Minia account now.</p>
+                                        <h5 class="mb-0">Welcome Back !</h5>
+                                        <p class="text-muted mt-2">Sign in to continue to C13.</p>
                                     </div>
-                                    <form class="needs-validation mt-4 pt-2" novalidate action="index.html">
+                                    <form class="mt-4 pt-2" action="index.html">
                                         <div class="mb-3">
-                                            <label for="useremail" class="form-label">Email</label>
-                                            <input type="email" class="form-control" id="useremail" placeholder="Enter email" required>
-                                            <div class="invalid-feedback">
-                                                Please Enter Email
-                                            </div>
+                                            <label class="form-label">Username</label>
+                                            <input type="text" class="form-control" id="username" placeholder="Enter username">
                                         </div>
+                                        <div class="mb-3">
+                                            <div class="d-flex align-items-start">
+                                                <div class="flex-grow-1">
+                                                    <label class="form-label">Password</label>
+                                                </div>
+                                                <div class="flex-shrink-0">
+                                                    <div class="">
+                                                        <a href="auth-recoverpw.html" class="text-muted">Forgot password?</a>
+                                                    </div>
+                                                </div>
+                                            </div>
 
-                                        <div class="mb-3">
-                                            <label for="username" class="form-label">Username</label>
-                                            <input type="text" class="form-control" id="username" placeholder="Enter username" required>
-                                            <div class="invalid-feedback">
-                                                Please Enter Username
+                                            <div class="input-group auth-pass-inputgroup">
+                                                <input type="password" class="form-control" placeholder="Enter password" aria-label="Password" aria-describedby="password-addon">
+                                                <button class="btn btn-light shadow-none ms-0" type="button" id="password-addon"><i class="mdi mdi-eye-outline"></i></button>
                                             </div>
                                         </div>
+                                        <div class="row mb-4">
+                                            <div class="col">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" id="remember-check">
+                                                    <label class="form-check-label" for="remember-check">
+                                                            Remember me
+                                                        </label>
+                                                </div>
+                                            </div>
 
-                                        <div class="mb-3">
-                                            <label for="userpassword" class="form-label">Password</label>
-                                            <input type="password" class="form-control" id="userpassword" placeholder="Enter password" required>
-                                            <div class="invalid-feedback">
-                                                Please Enter Password
-                                            </div>
-                                        </div>
-                                        <div class="mb-4">
-                                            <p class="mb-0">By registering you agree to the Minia <a href="#" class="text-primary">Terms of Use</a></p>
                                         </div>
                                         <div class="mb-3">
-                                            <button class="btn btn-primary w-100 waves-effect waves-light" type="submit">Register</button>
+                                            <button class="btn btn-primary w-100 waves-effect waves-light" type="submit">Log In</button>
                                         </div>
                                     </form>
 
                                     <div class="mt-4 pt-2 text-center">
                                         <div class="signin-other-title">
-                                            <h5 class="font-size-14 mb-3 text-muted fw-medium">- Sign up using -</h5>
+                                            <h5 class="font-size-14 mb-3 text-muted fw-medium">- Sign in with -</h5>
                                         </div>
 
                                         <ul class="list-inline mb-0">
@@ -100,7 +83,7 @@
                                     </div>
 
                                     <div class="mt-5 text-center">
-                                        <p class="text-muted mb-0">Already have an account ? <a href="auth-login.html" class="text-primary fw-semibold"> Login </a> </p>
+                                        <p class="text-muted mb-0">Don't have an account ? <a href="auth-register.html" class="text-primary fw-semibold"> Signup now </a> </p>
                                     </div>
                                 </div>
                                 <div class="mt-4 mt-md-5 text-center">
@@ -219,17 +202,9 @@
 
 
     <!-- JAVASCRIPT -->
-    <script src="assets/libs/jquery/jquery.min.js"></script>
-    <script src="assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/libs/metismenu/metisMenu.min.js"></script>
-    <script src="assets/libs/simplebar/simplebar.min.js"></script>
-    <script src="assets/libs/node-waves/waves.min.js"></script>
-    <script src="assets/libs/feather-icons/feather.min.js"></script>
-    <!-- pace js -->
-    <script src="assets/libs/pace-js/pace.min.js"></script>
-
-    <!-- validation init -->
-    <script src="assets/js/pages/validation.init.js"></script>
+    <script src="<%- include('../partials/scripts-auth', { pageScripts: ["assets/js/pages/pass-addon.init.js"] }) %>
+    <!-- password addon init -->
+    <script src="assets/js/pages/pass-addon.init.js"></script>
 
 </body>
 

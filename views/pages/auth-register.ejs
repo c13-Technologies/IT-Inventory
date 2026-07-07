@@ -1,27 +1,4 @@
-<!doctype html>
-<html lang="en">
-
-<head>
-
-    <meta charset="utf-8" />
-    <title>Email Verification | Minia - Minimal Admin & Dashboard Template</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta content="Premium Multipurpose Admin & Dashboard Template" name="description" />
-    <meta content="Themesbrand" name="author" />
-    <!-- App favicon -->
-    <link rel="shortcut icon" href="assets/images/favicon.ico">
-
-    <!-- preloader css -->
-    <link rel="stylesheet" href="assets/css/preloader.min.css" type="text/css" />
-
-    <!-- Bootstrap Css -->
-    <link href="assets/css/bootstrap.min.css" id="bootstrap-style" rel="stylesheet" type="text/css" />
-    <!-- Icons Css -->
-    <link href="assets/css/icons.min.css" rel="stylesheet" type="text/css" />
-    <!-- App Css-->
-    <link href="assets/css/app.min.css" id="app-style" rel="stylesheet" type="text/css" />
-
-</head>
+<%- include('../partials/head', { title: "Register" }) %>
 
 <body>
 
@@ -40,21 +17,67 @@
                                 </div>
                                 <div class="auth-content my-auto">
                                     <div class="text-center">
-                                        <div class="avatar-lg mx-auto">
-                                            <div class="avatar-title rounded-circle bg-light">
-                                                <i class="bx bxs-envelope h2 mb-0 text-primary"></i>
-                                            </div>
-                                        </div>
-                                        <div class="p-2 mt-4">
-                                            <h4>Verify your email</h4>
-                                            <p>We have sent you verification email <span class="fw-bold">example@abc.com</span>, Please check it</p>
-                                            <div class="mt-4">
-                                                <a href="index.html" class="btn btn-primary w-10">Verify email</a>
-                                            </div>
-                                        </div>
+                                        <h5 class="mb-0">Register Account</h5>
+                                        <p class="text-muted mt-2">Get your free Minia account now.</p>
                                     </div>
+                                    <form class="needs-validation mt-4 pt-2" novalidate action="index.html">
+                                        <div class="mb-3">
+                                            <label for="useremail" class="form-label">Email</label>
+                                            <input type="email" class="form-control" id="useremail" placeholder="Enter email" required>
+                                            <div class="invalid-feedback">
+                                                Please Enter Email
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="username" class="form-label">Username</label>
+                                            <input type="text" class="form-control" id="username" placeholder="Enter username" required>
+                                            <div class="invalid-feedback">
+                                                Please Enter Username
+                                            </div>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="userpassword" class="form-label">Password</label>
+                                            <input type="password" class="form-control" id="userpassword" placeholder="Enter password" required>
+                                            <div class="invalid-feedback">
+                                                Please Enter Password
+                                            </div>
+                                        </div>
+                                        <div class="mb-4">
+                                            <p class="mb-0">By registering you agree to the Minia <a href="#" class="text-primary">Terms of Use</a></p>
+                                        </div>
+                                        <div class="mb-3">
+                                            <button class="btn btn-primary w-100 waves-effect waves-light" type="submit">Register</button>
+                                        </div>
+                                    </form>
+
+                                    <div class="mt-4 pt-2 text-center">
+                                        <div class="signin-other-title">
+                                            <h5 class="font-size-14 mb-3 text-muted fw-medium">- Sign up using -</h5>
+                                        </div>
+
+                                        <ul class="list-inline mb-0">
+                                            <li class="list-inline-item">
+                                                <a href="javascript:void()" class="social-list-item bg-primary text-white border-primary">
+                                                        <i class="mdi mdi-facebook"></i>
+                                                    </a>
+                                            </li>
+                                            <li class="list-inline-item">
+                                                <a href="javascript:void()" class="social-list-item bg-info text-white border-info">
+                                                        <i class="mdi mdi-twitter"></i>
+                                                    </a>
+                                            </li>
+                                            <li class="list-inline-item">
+                                                <a href="javascript:void()" class="social-list-item bg-danger text-white border-danger">
+                                                        <i class="mdi mdi-google"></i>
+                                                    </a>
+                                            </li>
+                                        </ul>
+                                    </div>
+
                                     <div class="mt-5 text-center">
-                                        <p class="text-muted mb-0">Didn't receive an email ? <a href="#" class="text-primary fw-semibold"> Resend </a> </p>
+                                        <p class="text-muted mb-0">Already have an account ? <a href="auth-login.html" class="text-primary fw-semibold"> Login </a> </p>
                                     </div>
                                 </div>
                                 <div class="mt-4 mt-md-5 text-center">
@@ -173,14 +196,10 @@
 
 
     <!-- JAVASCRIPT -->
-    <script src="assets/libs/jquery/jquery.min.js"></script>
-    <script src="assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/libs/metismenu/metisMenu.min.js"></script>
-    <script src="assets/libs/simplebar/simplebar.min.js"></script>
-    <script src="assets/libs/node-waves/waves.min.js"></script>
-    <script src="assets/libs/feather-icons/feather.min.js"></script>
-    <!-- pace js -->
-    <script src="assets/libs/pace-js/pace.min.js"></script>
+    <script src="<%- include('../partials/scripts-auth', { pageScripts: ["assets/js/pages/validation.init.js"] }) %>
+
+    <!-- validation init -->
+    <script src="assets/js/pages/validation.init.js"></script>
 
 </body>
 
