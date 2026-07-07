@@ -16,3 +16,60 @@
 
     <script src="assets/js/app.js"></script>
     <script>if (window.feather) { feather.replace(); }</script>
+
+    <!-- Right-bar (settings panel) — was missing from the project; included here so the gear icon in the topbar works. -->
+    <%- include('../partials/rightbar') %>
+
+    <!-- Right-bar init shim (vanilla JS, no jQuery — jQuery is reverted to the broken local ref). -->
+    <script>
+      (function () {
+        function init() {
+          // Gear icon / close button / overlay: toggle body.right-bar-enabled
+          document.addEventListener('click', function (e) {
+            var t = e.target.closest && e.target.closest('.right-bar-toggle');
+            if (t) {
+              e.preventDefault();
+              document.body.classList.toggle('right-bar-enabled');
+              return;
+            }
+            var overlay = e.target.closest && e.target.closest('.right-bar-overlay');
+            if (overlay) {
+              document.body.classList.remove('right-bar-enabled');
+            }
+          });
+
+          // Dark mode toggle in right-bar (mirrors the topbar moon/sun button)
+          var darkToggle = document.getElementById('rightbar-dark-mode');
+          if (darkToggle) {
+            darkToggle.checked = document.body.getAttribute('data-layout-mode') === 'dark';
+            darkToggle.addEventListener('change', function () {
+              try {
+                if (darkToggle.checked) {
+                  document.body.setAttribute('data-layout-mode', 'dark');
+                  document.documentElement.setAttribute('data-bs-theme', 'dark');
+                  localStorage.setItem('data-layout-mode', 'dark');
+                } else {
+                  document.body.removeAttribute('data-layout-mode');
+                  document.documentElement.removeAttribute('data-bs-theme');
+                  localStorage.setItem('data-layout-mode', 'light');
+                }
+              } catch (e) { /* localStorage may be disabled */ }
+            });
+          }
+
+          // Compact sidebar toggle in right-bar
+          var compactToggle = document.getElementById('rightbar-compact-sidebar');
+          if (compactToggle) {
+            compactToggle.checked = document.body.classList.contains('sidebar-compact');
+            compactToggle.addEventListener('change', function () {
+              document.body.classList.toggle('sidebar-compact', compactToggle.checked);
+            });
+          }
+        }
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', init);
+        } else {
+          init();
+        }
+      })();
+    </script>
