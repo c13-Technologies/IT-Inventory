@@ -1,0 +1,35 @@
+<%# views/partials/row-actions.ejs
+   Locals:
+     - slug      : 'vendors' | 'licenses' | etc.
+     - id        : row.id
+     - mode      : 'full' (View+Edit+Delete, default) | 'mini' (Edit only). Optional.
+     - capLc     : optional lowercase singular label (e.g., 'vendor', 'license').
+     - modalMode : boolean (optional) — when true, Edit opens crudModal and
+                   Delete opens deleteModal via JS helpers instead of linking
+                   to /edit and posting a form directly.
+%>
+<% var _ra_mode = (typeof mode === 'undefined' || mode === null) ? 'full' : mode; %>
+<% var _ra_modal = (typeof modalMode !== 'undefined' && modalMode); %>
+<div class="d-flex gap-1 justify-content-end">
+  <a href="/<%= slug %>/<%= id %>" class="btn btn-sm btn-soft-primary" title="View"><i class="bx bx-show"></i></a>
+  <% if (_ra_modal) { %>
+    <button type="button" class="btn btn-sm btn-soft-secondary" title="Edit"
+            onclick="openCrudModalEdit('<%= slug %>','<%= capLc || slug.replace(/s$/, '') %>','<%= id %>')">
+      <i class="bx bx-edit"></i>
+    </button>
+  <% } else { %>
+    <a href="/<%= slug %>/<%= id %>/edit" class="btn btn-sm btn-soft-secondary" title="Edit"><i class="bx bx-edit"></i></a>
+  <% } %>
+  <% if (_ra_mode !== 'mini') { %>
+    <% if (_ra_modal) { %>
+      <button type="button" class="btn btn-sm btn-soft-danger" title="Delete"
+              onclick="openDeleteModal('<%= slug %>','<%= id %>','<%= capLc || slug.replace(/s$/, '') %>')">
+        <i class="bx bx-trash"></i>
+      </button>
+    <% } else { %>
+      <form method="POST" action="/<%= slug %>/<%= id %>/delete" onsubmit="return confirm('Delete this <%= capLc || slug.replace(/s$/, '') %>? This cannot be undone.');" style="display:inline">
+        <button type="submit" class="btn btn-sm btn-soft-danger" title="Delete"><i class="bx bx-trash"></i></button>
+      </form>
+    <% } %>
+  <% } %>
+</div>

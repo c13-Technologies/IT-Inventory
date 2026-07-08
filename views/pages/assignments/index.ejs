@@ -1,0 +1,85 @@
+<%- include('../../partials/head', { title: title }) %>
+
+<body>
+  <div id="layout-wrapper">
+    <%- include('../../partials/topbar') %>
+    <%- include('../../partials/sidebar') %>
+
+    <div class="main-content">
+      <div class="page-content">
+        <div class="container-fluid">
+
+          <div class="row">
+            <div class="col-12">
+              <div class="page-title-box d-sm-flex align-items-center justify-content-between">
+                <h4 class="mb-sm-0 font-size-18"><%= title %></h4>
+                <div class="page-title-right">
+                  <%- include('../../partials/breadcrumb', { items: [
+                    { label: 'Home',       href: '/' },
+                    { label: 'Lifecycle',  href: '/assignments' },
+                    { label: 'Assignments',href: null },
+                  ] }) %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-body">
+                  <%- include('../../partials/filter-toolbar', { filters: ['search'], query: query, action: '/assignments', resetUrl: '/assignments', searchPlaceholder: 'Asset ID or user…' }) %>
+
+                  <hr class="mt-3 mb-3">
+
+                  <%- include('../../partials/list-toolbar', { title: 'Assignment', total: assignments.length, modalTarget: '#crudModal', slug: 'assignments', cap: 'Assignment', newLabel: 'New Assignment' }) %>
+
+                  <% if (assignments.length === 0) { %>
+                    <%- include('../../partials/empty-state', { icon: 'bx-transfer', title: 'No assignments yet', message: 'Assign an asset from the asset detail page or use the New button above to see it here.' }) %>
+                  <% } else { %>
+                    <div class="table-responsive">
+                      <table class="table table-nowrap align-middle mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Asset</th>
+                            <th>Assigned to</th>
+                            <th>Assigned</th>
+                            <th>Returned</th>
+                            <th>Notes</th>
+                            <th class="text-end">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% assignments.forEach(function(a) { %>
+                            <tr>
+                              <td><a href="/assets/<%= a.assetId %>" class="text-reset"><% if (a.asset) { %><%= a.asset.assetTag %><% } else { %><code><%= a.assetId %></code><% } %></a></td>
+                              <td><strong><%= a.user ? a.user.fullName : '—' %></strong></td>
+                              <td><%= a.assignedAt ? new Date(a.assignedAt).toLocaleDateString() : '—' %></td>
+                              <td><% if (a.returnedAt) { %><span class="badge bg-success">Returned <%= new Date(a.returnedAt).toLocaleDateString() %></span><% } else { %><span class="badge bg-primary">Active</span><% } %></td>
+                              <td class="text-muted small"><%= a.notes || '' %></td>
+                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'assignments', id: a.id, capLc: 'assignment', modalMode: true }) %></td>
+                            </tr>
+                          <% }); %>
+                        </tbody>
+                      </table>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <% var _aMap = {}; assignments.forEach(function(a) { _aMap[a.id] = a; }); %>
+          <script>window.__CRUD_ROWS__ = <%= JSON.stringify(_aMap) %>;</script>
+
+          <%- include('../../partials/modals/crud-modal', { slug: 'assignments', cap: 'Assignment', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
+          <%- include('../../partials/modals/delete-modal') %>
+
+        </div>
+      </div>
+      <%- include('../../partials/footer') %>
+    </div>
+  </div>
+  <%- include('../../partials/scripts', { pageScripts: [] }) %>
+</body>
+</html>

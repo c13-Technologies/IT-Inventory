@@ -1,0 +1,86 @@
+<%- include('../../partials/head', { title: title }) %>
+
+<body>
+  <div id="layout-wrapper">
+    <%- include('../../partials/topbar') %>
+    <%- include('../../partials/sidebar') %>
+
+    <div class="main-content">
+      <div class="page-content">
+        <div class="container-fluid">
+
+          <div class="row">
+            <div class="col-12">
+              <div class="page-title-box d-sm-flex align-items-center justify-content-between">
+                <h4 class="mb-sm-0 font-size-18"><%= title %></h4>
+                <div class="page-title-right">
+                  <%- include('../../partials/breadcrumb', { items: [
+                    { label: 'Home',            href: '/' },
+                    { label: 'Communications',  href: '/notifications' },
+                    { label: 'Notifications',   href: null },
+                  ] }) %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-body">
+                  <%- include('../../partials/filter-toolbar', {
+                    filters: ['search', 'status'],
+                    query: query,
+                    statusOptions: (typeof statusOptions !== 'undefined' && statusOptions !== null) ? statusOptions : ['', 'UNREAD', 'READ'],
+                    action: '/notifications',
+                    resetUrl: '/notifications',
+                    searchPlaceholder: 'Title or body text…'
+                  }) %>
+
+                  <hr class="mt-3 mb-3">
+
+                  <%- include('../../partials/list-toolbar', { title: 'Notification', total: notifications.length, newUrl: null, newLabel: null }) %>
+
+                  <% if (notifications.length === 0) { %>
+                    <%- include('../../partials/empty-state', { icon: 'bx-bell', title: 'No notifications', message: 'System alerts will appear here — approvals, assignments, warranty expiries, and license renewals.' }) %>
+                  <% } else { %>
+                    <div class="table-responsive">
+                      <table class="table table-nowrap align-middle mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Type</th>
+                            <th>Title</th>
+                            <th>Recipient</th>
+                            <th>Received</th>
+                            <th>Status</th>
+                            <th class="text-end">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% notifications.forEach(function(n) { %>
+                            <tr class="<%= !n.readAt ? 'fw-bold' : '' %>">
+                              <td><span class="badge bg-<%= n.type === 'APPROVAL_PENDING' ? 'warning' : n.type === 'APPROVAL_APPROVED' ? 'success' : 'secondary' %>"><%= String(n.type || '').replace(/_/g, ' ') %></span></td>
+                              <td><%= n.title %></td>
+                              <td><%= n.userName || '—' %></td>
+                              <td><%= n.createdAt ? new Date(n.createdAt).toLocaleString() : '—' %></td>
+                              <td><span class="badge bg-<%= n.readAt ? 'secondary' : 'primary' %>"><%= n.readAt ? 'Read' : 'Unread' %></span></td>
+                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'notifications', id: n.id, capLc: 'notification' }) %></td>
+                            </tr>
+                          <% }); %>
+                        </tbody>
+                      </table>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <%- include('../../partials/footer') %>
+    </div>
+  </div>
+  <%- include('../../partials/scripts', { pageScripts: [] }) %>
+</body>
+</html>

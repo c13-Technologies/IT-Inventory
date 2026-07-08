@@ -27,71 +27,18 @@
             </div>
           </div>
 
-          <!-- Filters + Table -->
+          <!-- Filter toolbar + Table -->
           <div class="row">
-            <div class="col-lg-3">
+            <div class="col-12">
               <div class="card">
                 <div class="card-body">
-                  <h5 class="card-title mb-3"><i class="bx bx-filter-alt me-1"></i>Filters</h5>
-                  <form method="GET" action="/assets" id="assetFilters">
-                    <div class="mb-3">
-                      <label class="form-label">Search</label>
-                      <input type="text" name="search" class="form-control" placeholder="Name, tag, or serial…" value="<%= (query && query.search) || '' %>">
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Status</label>
-                      <select name="status" class="form-select">
-                        <% statuses.forEach(function(s) { %>
-                          <option value="<%= s %>" <%= (query && query.status) === s ? 'selected' : '' %>><%= s === '' ? '— Any status —' : s.replace(/_/g, ' ') %></option>
-                        <% }); %>
-                      </select>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Category</label>
-                      <select name="categoryId" class="form-select">
-                        <option value="">— Any category —</option>
-                        <% categories.forEach(function(c) { %>
-                          <option value="<%= c.id %>" <%= (query && query.categoryId) === c.id ? 'selected' : '' %>><%= c.name %></option>
-                        <% }); %>
-                      </select>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Location</label>
-                      <select name="locationId" class="form-select">
-                        <option value="">— Any location —</option>
-                        <% locations.forEach(function(l) { %>
-                          <option value="<%= l.id %>" <%= (query && query.locationId) === l.id ? 'selected' : '' %>><%= l.name %></option>
-                        <% }); %>
-                      </select>
-                    </div>
-                    <div class="mb-3">
-                      <label class="form-label">Vendor</label>
-                      <select name="vendorId" class="form-select">
-                        <option value="">— Any vendor —</option>
-                        <% vendors.forEach(function(v) { %>
-                          <option value="<%= v.id %>" <%= (query && query.vendorId) === v.id ? 'selected' : '' %>><%= v.name %></option>
-                        <% }); %>
-                      </select>
-                    </div>
-                    <div class="form-check mb-3">
-                      <input class="form-check-input" type="checkbox" id="assignedOnly" name="assignedOnly" value="1" <%= (query && query.assignedOnly) ? 'checked' : '' %>>
-                      <label class="form-check-label" for="assignedOnly">Assigned to someone only</label>
-                    </div>
-                    <div class="d-grid gap-2">
-                      <button type="submit" class="btn btn-primary"><i class="bx bx-search me-1"></i>Apply</button>
-                      <a href="/assets" class="btn btn-light"><i class="bx bx-reset me-1"></i>Reset</a>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
+                  <%- include('../../partials/filter-toolbar', { query: query, statusOptions: statuses, categories: categories, locations: locations, vendors: vendors, filters: ['search','status','vendor','category','location','assignedOnly'] }) %>
 
-            <div class="col-lg-9">
-              <div class="card">
-                <div class="card-body">
+                  <hr class="mt-3 mb-3">
+
                   <div class="d-flex align-items-center justify-content-between mb-3">
-                    <h5 class="card-title mb-0"><%= result.total %> asset<%= result.total === 1 ? '' : 's' %><% if (result.total !== assetsAll.length) { %><small class="text-muted"> (of <%= assetsAll.length %>)</small><% } %></h5>
-                    <a href="/assets/new" class="btn btn-primary"><i class="bx bx-plus me-1"></i>New Asset</a>
+                    <h5 class="card-title mb-0"><%= result.total %> asset<%= result.total === 1 ? '' : 's' %><% if (result.total !== assetsAll.total) { %><small class="text-muted"> (of <%= assetsAll.total %>)</small><% } %></h5>
+                    <a href="/assets/new" class="btn btn-primary btn-sm"><i class="bx bx-plus me-1"></i>New Asset</a>
                   </div>
 
                   <!-- Inlined table (was the data-table partial; inlined to bypass an EJS include-data propagation edge case) -->

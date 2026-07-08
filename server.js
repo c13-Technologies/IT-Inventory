@@ -16,6 +16,9 @@ const express = require('express');
 
 const app = express();
 
+// Body parsing for CRUD POSTs (form submissions).
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
 // Don't advertise the runtime in responses.
 app.disable('x-powered-by');
 
@@ -155,10 +158,574 @@ app.get('/assets/:id/qr', (req, res, next) => {
 });
 
 // ----------------------------------------------------------------------
+// Directory / lifecycle / inventory list pages (added for the new sidebar nav).
+// Data-driven pages pass rows straight from mockData.js. Stub pages (licenses,
+// departments, approvals) just render an empty-state banner — the views
+// handle the "no data" branch themselves, so we don't need to inject empty
+// arrays from the route.
+// ----------------------------------------------------------------------
+
+// Directory — model-driven, mockData-backed
+app.get('/vendors', (req, res) => {
+  let rows = mockData.getVendors();
+  const search = req.query.search || '';
+  const status = req.query.status || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(v =>
+      v.name.toLowerCase().includes(q) ||
+      (v.contactPerson || '').toLowerCase().includes(q) ||
+      (v.email || '').toLowerCase().includes(q)
+    );
+  }
+  if (status) {
+    rows = rows.filter(v => v.status === status);
+  }
+  res.render('pages/vendors/index', {
+    title:   'Vendors',
+    slug:    'vendors',
+    query:   req.query,
+    vendors: rows,
+    schema:  schemas['vendors'] || [],
+    sources: getSources('vendors'),
+    statusOptions: ['', 'ACTIVE', 'INACTIVE'],
+  });
+});
+
+app.get('/locations', (req, res) => {
+  let rows = mockData.getLocations();
+  const search = req.query.search || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(l => l.name.toLowerCase().includes(q) || (l.address || '').toLowerCase().includes(q));
+  }
+  res.render('pages/locations/index', {
+    title:     'Locations',
+    slug:      'locations',
+    query:     req.query,
+    locations: rows,
+    schema:    schemas['locations'] || [],
+    sources:   getSources('locations'),
+  });
+});
+
+app.get('/categories', (req, res) => {
+  let rows = mockData.getCategories();
+  const search = req.query.search || '';
+  const type   = req.query.status || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(c => c.name.toLowerCase().includes(q));
+  }
+  if (type) rows = rows.filter(c => c.type === type);
+  res.render('pages/categories/index', {
+    title:         'Categories',
+    slug:          'categories',
+    query:         req.query,
+    categories:    rows,
+    schema:        schemas['categories'] || [],
+    sources:       getSources('categories'),
+    statusOptions: ['', 'HARDWARE', 'SOFTWARE', 'PERIPHERAL', 'ACCESSORY'],
+  });
+});
+
+app.get('/users', (req, res) => {
+  let rows = mockData.getUsers();
+  const search = req.query.search || '';
+  const role   = req.query.status || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(u => u.fullName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+  }
+  if (role) rows = rows.filter(u => u.role === role);
+  res.render('pages/users/index', {
+    title:         'Users',
+    slug:          'users',
+    query:         req.query,
+    users:         rows,
+    schema:        schemas['users'] || [],
+    sources:       getSources('users'),
+    statusOptions: ['', 'IT_MANAGER', 'IT_SUPPORT', 'DEPARTMENT_HEAD', 'EMPLOYEE'],
+  });
+});
+
+// Lifecycle — flat assignments + maintenance listings (added as global accessors to mockData)
+app.get('/assignments', (req, res) => {
+  let rows = mockData.getAssignments();
+  const search = req.query.search || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(a =>
+      (a.assetId || '').toLowerCase().includes(q) ||
+      (a.user && a.user.fullName || '').toLowerCase().includes(q)
+    );
+  }
+  res.render('pages/assignments/index', {
+    title:       'Assignments',
+    slug:        'assignments',
+    query:       req.query,
+    assignments: rows,
+    schema:      schemas['assignments'] || [],
+    sources:     getSources('assignments'),
+  });
+});
+
+app.get('/maintenance', (req, res) => {
+  let rows = mockData.getMaintenance();
+  const search = req.query.search || '';
+  const status = req.query.status || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(m =>
+      (m.description || '').toLowerCase().includes(q) ||
+      (m.vendor && m.vendor.name || '').toLowerCase().includes(q) ||
+      (m.ticketNumber || '').toLowerCase().includes(q)
+    );
+  }
+  if (status) rows = rows.filter(m => m.status === status);
+  res.render('pages/maintenance/index', {
+    title:         'Maintenance',
+    slug:          'maintenance',
+    query:         req.query,
+    maintenance:   rows,
+    schema:        schemas['maintenance'] || [],
+    statusOptions: ['', 'OPEN', 'IN_PROGRESS', 'COMPLETED', 'CLOSED'],
+  });
+});
+
+// Inventory/Lifecycle stubs — Phase 6 (Prisma) wiring only; views render empty-state
+// Pass an empty array so the toolbar + table-or-empty-state pattern works.
+app.get('/licenses', (req, res) => {
+  let rows = typeof mockData.listLicenses === 'function' ? mockData.listLicenses() : [];
+  const search = req.query.search || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(l => l.name.toLowerCase().includes(q) || (l.licenseKey || '').toLowerCase().includes(q));
+  }
+  res.render('pages/licenses/index', {
+    title:    'Software Licenses',
+    slug:     'licenses',
+    query:    req.query,
+    licenses: rows,
+    schema:   schemas['licenses'] || [],
+  });
+});
+app.get('/departments', (req, res) => {
+  let rows = typeof mockData.listDepartments === 'function' ? mockData.listDepartments() : [];
+  const search = req.query.search || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(d => d.name.toLowerCase().includes(q) || (d.code || '').toLowerCase().includes(q));
+  }
+  res.render('pages/departments/index', {
+    title:       'Departments',
+    slug:        'departments',
+    query:       req.query,
+    departments: rows,
+    schema:      schemas['departments'] || [],
+    sources:     getSources('departments'),
+  });
+});
+app.get('/approvals', (req, res) => {
+  let rows = typeof mockData.listApprovals === 'function' ? mockData.listApprovals() : [];
+  const search = req.query.search || '';
+  const status = req.query.status || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(a => (a.entityType || '').toLowerCase().includes(q) || (a.entityId || '').toLowerCase().includes(q));
+  }
+  if (status) rows = rows.filter(a => a.status === status);
+  res.render('pages/approvals/index', {
+    title:         'Approvals',
+    slug:          'approvals',
+    query:         req.query,
+    approvals:     rows,
+    schema:        schemas['approvals'] || [],
+    sources:       getSources('approvals'),
+    statusOptions: ['', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'],
+  });
+});
+
+// ----------------------------------------------------------------------
+// PRO sidebar pages — inventory, lifecycle, admin, communications.
+// All render empty-state stubs wired for Phase 6 Prisma swap.
+// ----------------------------------------------------------------------
+
+app.get('/license-seats', (req, res) => {
+  let rows = typeof mockData.listLicenseSeats === 'function' ? mockData.listLicenseSeats() : [];
+  const search = req.query.search || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(s =>
+      (s.licenseName || '').toLowerCase().includes(q) ||
+      (s.assetName || '').toLowerCase().includes(q) ||
+      (s.userName || '').toLowerCase().includes(q)
+    );
+  }
+  res.render('pages/license-seats/index', {
+    title:  'License Seats',
+    slug:   'license-seats',
+    query:  req.query,
+    seats:  rows,
+    schema: schemas['license-seats'] || [],
+  });
+});
+
+app.get('/warranty', (req, res) => {
+  let rows = typeof mockData.listWarranties === 'function' ? mockData.listWarranties() : [];
+  const search = req.query.search || '';
+  const status = req.query.status || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(w =>
+      (w.assetName || '').toLowerCase().includes(q) ||
+      (w.assetTag || '').toLowerCase().includes(q)
+    );
+  }
+  if (status) rows = rows.filter(w => w.status === status);
+  res.render('pages/warranty/index', {
+    title:         'Warranty Tracking',
+    slug:          'warranty',
+    query:         req.query,
+    warranties:    rows,
+    schema:        schemas['warranty'] || [],
+    statusOptions: ['', 'ACTIVE', 'EXPIRING', 'EXPIRED'],
+  });
+});
+
+app.get('/roles', (req, res) => {
+  let rows = typeof mockData.listRoles === 'function' ? mockData.listRoles() : [];
+  const search = req.query.search || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(r =>
+      r.name.toLowerCase().includes(q) ||
+      (r.description || '').toLowerCase().includes(q)
+    );
+  }
+  res.render('pages/roles/index', {
+    title:  'Roles & Permissions',
+    slug:   'roles',
+    query:  req.query,
+    roles:  rows,
+    schema: schemas['roles'] || [],
+  });
+});
+
+app.get('/audit-log', (req, res) => {
+  let rows = typeof mockData.listAuditLogs === 'function' ? mockData.listAuditLogs() : [];
+  const search = req.query.search || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(e =>
+      (e.action || '').toLowerCase().includes(q) ||
+      (e.entityType || '').toLowerCase().includes(q) ||
+      (e.entityId || '').toLowerCase().includes(q) ||
+      (e.userName || '').toLowerCase().includes(q)
+    );
+  }
+  res.render('pages/audit-log/index', {
+    title:   'Audit Log',
+    slug:    'audit-log',
+    query:   req.query,
+    entries: rows,
+    schema:  schemas['audit-log'] || [],
+  });
+});
+
+app.get('/reports', (req, res) => {
+  let rows = typeof mockData.listReports === 'function' ? mockData.listReports() : [];
+  const search = req.query.search || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(r => (r.name || '').toLowerCase().includes(q));
+  }
+  res.render('pages/reports/index', {
+    title:   'Reports',
+    slug:    'reports',
+    query:   req.query,
+    reports: rows,
+    schema:  schemas['reports'] || [],
+  });
+});
+
+app.get('/notifications', (req, res) => {
+  let rows = typeof mockData.listNotifications === 'function' ? mockData.listNotifications() : [];
+  const search = req.query.search || '';
+  const status = req.query.status || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(n =>
+      (n.title || '').toLowerCase().includes(q) ||
+      (n.body || '').toLowerCase().includes(q)
+    );
+  }
+  if (status === 'READ') rows = rows.filter(n => n.readAt != null);
+  else if (status === 'UNREAD') rows = rows.filter(n => n.readAt == null);
+  res.render('pages/notifications/index', {
+    title:         'Notifications',
+    slug:          'notifications',
+    query:         req.query,
+    notifications: rows,
+    schema:        schemas['notifications'] || [],
+    statusOptions: ['', 'UNREAD', 'READ'],
+  });
+});
+
+app.get('/webhooks', (req, res) => {
+  let rows = typeof mockData.listWebhooks === 'function' ? mockData.listWebhooks() : [];
+  const search = req.query.search || '';
+  const channel = req.query.status || '';
+  if (search) {
+    const q = search.toLowerCase();
+    rows = rows.filter(w =>
+      (w.url || '').toLowerCase().includes(q) ||
+      (w.events || []).some(ev => ev.toLowerCase().includes(q))
+    );
+  }
+  if (channel) rows = rows.filter(w => w.channel === channel);
+  res.render('pages/webhooks/index', {
+    title:         'Webhooks',
+    slug:          'webhooks',
+    query:         req.query,
+    webhooks:      rows,
+    schema:        schemas['webhooks'] || [],
+    statusOptions: ['', 'SLACK', 'TEAMS'],
+  });
+});
+
+// ----------------------------------------------------------------------
 // Static assets — every other file in the project root (assets/, fonts.*/,
 // _DataURI/, docs/, prisma/, server.js, package.json, etc.). We do NOT
 // serve *.html here; the EJS routes above own those URLs.
 // ----------------------------------------------------------------------
+// ----------------------------------------------------------------------
+// CRUD routes for the 9 sidebar nav modules — auto-generated new / detail /
+// edit / create / update / delete routes per module. Routes share the
+// schemas.js field shapes (also read by mockData mutators and the
+// views/partials/crud-form.ejs renderer).
+// ----------------------------------------------------------------------
+const schemas = require('./views/lib/schemas');
+
+// Mapping from URL slug → mutator class name. (slugs plural → singular capitalized.)
+const CRUD_SLUG_TO_NAME = {
+  vendors:     'Vendor',
+  locations:   'Location',
+  categories:  'Category',
+  users:       'User',
+  assignments: 'Assignment',
+  maintenance: 'Maintenance',
+  licenses:    'License',
+  departments: 'Department',
+  approvals:   'Approval',
+};
+
+// Parent sidebar section per slug — used for the breadcrumb on new/edit/detail views.
+const CRUD_PARENT = {
+  vendors:     'Directory',
+  locations:   'Directory',
+  categories:  'Directory',
+  users:       'Directory',
+  assignments: 'Lifecycle',
+  maintenance: 'Lifecycle',
+  licenses:    'Inventory',
+  departments: 'Directory',
+  approvals:   'Lifecycle',
+};
+
+// Source rows for select-fk fields. Resolved once per request.
+function getSources(_slug) {
+  return {
+    categories:  mockData.getCategories(),
+    locations:   mockData.getLocations(),
+    vendors:     mockData.getVendors(),
+    users:       mockData.getUsers(),
+    assets:      mockData.getAssets().rows.map(a => ({ id: a.id, name: a.assetTag + ' — ' + a.name, assetTag: a.assetTag })),
+    departments: typeof mockData.listDepartments === 'function' ? mockData.listDepartments() : [],
+  };
+}
+
+// Build the locals object that a list page needs. Used by the CRUD loop when
+// a modal submit fails validation — instead of rendering the standalone /new
+// or /edit page, we re-render the list page with the modal pre-opened.
+function getListLocals(slug, query) {
+  const sources = getSources(slug);
+  const base = { slug, query, schema: schemas[slug] || [], sources, title: TITLES[slug] || slug };
+  switch (slug) {
+    case 'vendors': {
+      let rows = mockData.getVendors();
+      const s = (query && query.search) || '';
+      const st = (query && query.status) || '';
+      if (s) { const q = s.toLowerCase(); rows = rows.filter(v => v.name.toLowerCase().includes(q) || (v.contactPerson || '').toLowerCase().includes(q) || (v.email || '').toLowerCase().includes(q)); }
+      if (st) rows = rows.filter(v => v.status === st);
+      return Object.assign({}, base, { vendors: rows, statusOptions: ['', 'ACTIVE', 'INACTIVE'] });
+    }
+    case 'locations': {
+      let rows = mockData.getLocations();
+      const s = (query && query.search) || '';
+      if (s) { const q = s.toLowerCase(); rows = rows.filter(l => l.name.toLowerCase().includes(q) || (l.address || '').toLowerCase().includes(q)); }
+      return Object.assign({}, base, { locations: rows });
+    }
+    case 'categories': {
+      let rows = mockData.getCategories();
+      const s = (query && query.search) || '';
+      const t = (query && query.status) || '';
+      if (s) { const q = s.toLowerCase(); rows = rows.filter(c => c.name.toLowerCase().includes(q)); }
+      if (t) rows = rows.filter(c => c.type === t);
+      return Object.assign({}, base, { categories: rows, statusOptions: ['', 'HARDWARE', 'SOFTWARE', 'PERIPHERAL', 'ACCESSORY'] });
+    }
+    case 'users': {
+      let rows = mockData.getUsers();
+      const s = (query && query.search) || '';
+      const r = (query && query.status) || '';
+      if (s) { const q = s.toLowerCase(); rows = rows.filter(u => u.fullName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)); }
+      if (r) rows = rows.filter(u => u.role === r);
+      return Object.assign({}, base, { users: rows, statusOptions: ['', 'IT_MANAGER', 'IT_SUPPORT', 'DEPARTMENT_HEAD', 'EMPLOYEE'] });
+    }
+    case 'assignments': {
+      let rows = mockData.getAssignments();
+      const s = (query && query.search) || '';
+      if (s) { const q = s.toLowerCase(); rows = rows.filter(a => (a.assetId || '').toLowerCase().includes(q) || (a.user && a.user.fullName || '').toLowerCase().includes(q)); }
+      return Object.assign({}, base, { assignments: rows });
+    }
+    case 'departments': {
+      let rows = typeof mockData.listDepartments === 'function' ? mockData.listDepartments() : [];
+      const s = (query && query.search) || '';
+      if (s) { const q = s.toLowerCase(); rows = rows.filter(d => d.name.toLowerCase().includes(q) || (d.code || '').toLowerCase().includes(q)); }
+      return Object.assign({}, base, { departments: rows });
+    }
+    case 'approvals': {
+      let rows = typeof mockData.listApprovals === 'function' ? mockData.listApprovals() : [];
+      const s = (query && query.search) || '';
+      const st = (query && query.status) || '';
+      if (s) { const q = s.toLowerCase(); rows = rows.filter(a => (a.entityType || '').toLowerCase().includes(q) || (a.entityId || '').toLowerCase().includes(q)); }
+      if (st) rows = rows.filter(a => a.status === st);
+      return Object.assign({}, base, { approvals: rows, statusOptions: ['', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'] });
+    }
+    default: return Object.assign({}, base, {});
+  }
+}
+
+for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
+  const Cap     = CRUD_SLUG_TO_NAME[slug];
+  const capLc   = Cap[0].toLowerCase() + Cap.slice(1);
+  const schema  = (schemas[slug]) || [];
+  const hasCrud = typeof mockData['create' + Cap] === 'function';
+
+  if (!hasCrud) continue;
+
+  // GET /<slug>/:id  (detail)
+  app.get('/' + slug + '/:id', function(req, res, next) {
+    const row = mockData['get' + Cap + 'ById'](req.params.id);
+    if (!row) return next();
+    res.render('pages/' + slug + '/detail', {
+      title: row.name || row.fullName || capLc + ' ' + req.params.id,
+      slug, schema, row, sources: getSources(slug),
+      capLc, cap: Cap,
+      parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
+      errors: {},
+    });
+  });
+
+  // GET /<slug>/new
+  app.get('/' + slug + '/new', function(req, res) {
+    res.render('pages/' + slug + '/new', {
+      title:   'New ' + Cap,
+      slug, schema,
+      row:     {},
+      sources: getSources(slug),
+      errors:  {},
+      capLc,  cap: Cap,
+      parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
+    });
+  });
+
+  // POST /<slug>  (create)
+  app.post('/' + slug, function(req, res) {
+    const result = mockData['create' + Cap](req.body || {});
+    if (!result.success) {
+      if (req.body._modal) {
+        // Modal submit failed — re-render the list page with modal pre-opened
+        const listLocals = getListLocals(slug, {});
+        return res.status(400).render('pages/' + slug + '/index', Object.assign({}, listLocals, {
+          capLc, cap: Cap,
+          parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
+          modalErrors: result.errors,
+          modalRow: req.body || {},
+          modalMode: 'new',
+        }));
+      }
+      return res.status(400).render('pages/' + slug + '/new', {
+        title: 'New ' + Cap, slug, schema,
+        row: req.body || {}, sources: getSources(slug),
+        errors: result.errors,
+        capLc, cap: Cap,
+        parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
+      });
+    }
+    res.redirect('/' + slug + (req.body._modal ? '' : (result.data && result.data.id ? '/' + result.data.id : '')));
+  });
+
+  // GET /<slug>/:id/edit
+  app.get('/' + slug + '/:id/edit', function(req, res, next) {
+    const row = mockData['get' + Cap + 'ById'](req.params.id);
+    if (!row) return next();
+    res.render('pages/' + slug + '/edit', {
+      title:   'Edit ' + (row.name || row.fullName || capLc + ' ' + req.params.id),
+      slug, schema,
+      row, sources: getSources(slug),
+      errors:  {},
+      capLc, cap: Cap,
+      parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
+    });
+  });
+
+  // POST /<slug>/:id  (update)
+  app.post('/' + slug + '/:id', function(req, res, next) {
+    const existing = mockData['get' + Cap + 'ById'](req.params.id);
+    if (!existing) return next();
+    const result = mockData['update' + Cap](req.params.id, req.body || {});
+    if (!result.success) {
+      if (req.body._modal) {
+        const listLocals = getListLocals(slug, {});
+        return res.status(400).render('pages/' + slug + '/index', Object.assign({}, listLocals, {
+          capLc, cap: Cap,
+          parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
+          modalErrors: result.errors,
+          modalRow: Object.assign({}, existing, req.body || {}),
+          modalMode: 'edit',
+        }));
+      }
+      return res.status(400).render('pages/' + slug + '/edit', {
+        title: 'Edit ' + (existing.name || existing.fullName || req.params.id),
+        slug, schema,
+        row: Object.assign({}, existing, req.body || {}),
+        sources: getSources(slug),
+        errors: result.errors,
+        capLc, cap: Cap,
+        parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
+      });
+    }
+    res.redirect('/' + slug + '/' + req.params.id);
+  });
+
+  // POST /<slug>/:id/delete
+  app.post('/' + slug + '/:id/delete', function(req, res) {
+    const result = mockData['delete' + Cap](req.params.id);
+    if (result.success) return res.redirect('/' + slug);
+    // delete failed — re-render the detail page with the FK blocker surfaced
+    const row = mockData['get' + Cap + 'ById'](req.params.id) || { id: req.params.id };
+    res.status(400).render('pages/' + slug + '/detail', {
+      title: row.name || row.fullName || capLc + ' ' + req.params.id,
+      slug, schema,
+      row, sources: getSources(slug),
+      errors: result.errors,
+      capLc, cap: Cap,
+      parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
+    });
+  });
+}
+
 app.use(express.static(ROOT_DIR, {
   index: false,      // '/' is handled by the explicit route above
   extensions: false,  // don't auto-resolve /foo → /foo.html

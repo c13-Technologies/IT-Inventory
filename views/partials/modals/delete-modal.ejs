@@ -1,0 +1,30 @@
+<%# views/partials/modals/delete-modal.ejs
+   Simple Bootstrap 5 confirmation modal for delete actions.
+   The target form action is set dynamically by the openDeleteModal() helper
+   (defined in crud-modal.ejs's inline script).
+
+   No locals required — the JS helper sets the form action and label text.
+%>
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <form method="POST" action="" id="deleteModalForm">
+        <div class="modal-header bg-danger text-white">
+          <h5 class="modal-title" id="deleteModalLabel">
+            <i class="bx bx-trash me-1"></i>Delete item?
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="deleteModalBody">
+          This action cannot be undone.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger">
+            <i class="bx bx-trash me-1"></i>Delete
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

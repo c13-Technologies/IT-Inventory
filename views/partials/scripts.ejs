@@ -1,6 +1,5 @@
-
-    <!-- Feather Icons: replaces <i data-feather="home"> with inline <svg> at runtime. Project has no local copy of feather.min.js, so load it from a CDN. Must load before the replace() call below. -->
-    <script src="https://unpkg.com/feather-icons@4.29.0/dist/feather.min.js"></script>
+    <!-- Feather Icons: replaces <i data-feather="home"> with inline <svg>. Local copy, no CDN dependency. Must load before app.js / feather.replace(). -->
+    <script src="assets/libs/feather-icons/feather.min.js"></script>
     <script src="assets/libs/jquery/jquery.min.js"></script>
     <script src="assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="assets/libs/metismenu/metisMenu.min.js"></script>
@@ -8,58 +7,39 @@
     <script src="assets/libs/node-waves/waves.min.js"></script>
     <script src="assets/libs/pace-js/pace.min.js"></script>
 
+    <!-- Minia theme's master JS. Powers sidebar chevron collapse (metisMenu init on #side-menu), the right-bar settings panel (layout mode, layout width, sidebar size, topbar/sidebar color, layout direction), the vertical-menu button, fullscreen toggle, feather.replace(), Waves.init(), and tooltip/popover/toast auto-init. Served locally (zero CDN policy). -->
+    <script src="assets/js/app.js"></script>
+
 <% if (typeof pageScripts !== "undefined" && pageScripts && pageScripts.length) { %>
 <% pageScripts.forEach(function (s) { %>
     <script src="<%= s %>"></script>
 <% }); %>
 <% } %>
 
+    <!-- feather.replace() safety net — app.js already calls it, but this stays so sidebar icons still render if app.js ever fails to load. -->
     <script>if (window.feather) { feather.replace(); }</script>
 
     <!-- Right-bar (settings panel) — was missing from the project; included here so the gear icon in the topbar works. -->
     <%- include('../partials/rightbar') %>
 
-    <!-- Right-bar init shim (vanilla JS, no jQuery — jQuery is reverted to the broken local ref). -->
+    <!-- Dark-mode persistence spy: Minia app.js toggles the visual theme but does not save the choice to localStorage, so a reload falls back to light. Mirror its decisions here so the choice survives a refresh (the FOUC shim in head.ejs then re-applies it on the next page load). -->
     <script>
       (function () {
         function init() {
-          // Gear icon / close button / overlay: toggle body.right-bar-enabled
-          document.addEventListener('click', function (e) {
-            var t = e.target.closest && e.target.closest('.right-bar-toggle');
-            if (t) {
-              e.preventDefault();
-              document.body.classList.toggle('right-bar-enabled');
-              return;
-            }
-            var overlay = e.target.closest && e.target.closest('.rightbar-overlay');
-            if (overlay) {
-              document.body.classList.remove('right-bar-enabled');
+          var KEY = 'data-layout-mode';
+          var btn = document.getElementById('mode-setting-btn');
+          if (btn) btn.addEventListener('click', function () {
+            try {
+              var isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+              localStorage.setItem(KEY, isDark ? 'light' : 'dark');
+            } catch (e) { /* localStorage may be disabled */ }
+          });
+          document.addEventListener('change', function (e) {
+            var t = e.target;
+            if (t && t.name === 'layout-mode') {
+              try { localStorage.setItem(KEY, t.value); } catch (err) { /* localStorage may be disabled */ }
             }
           });
-
-          // Layout Mode radios (Minia Theme Customizer) — wire up dark/light
-          var layoutModeRadios = document.querySelectorAll('input[name="layout-mode"]');
-          if (layoutModeRadios.length) {
-            // Sync checked state on page load from the current dark-mode attribute
-            var currentMode = document.body.getAttribute('data-layout-mode') === 'dark' ? 'dark' : 'light';
-            layoutModeRadios.forEach(function (radio) {
-              radio.checked = (radio.value === currentMode);
-              radio.addEventListener('change', function () {
-                if (!radio.checked) return;
-                try {
-                  if (radio.value === 'dark') {
-                    document.body.setAttribute('data-layout-mode', 'dark');
-                    document.documentElement.setAttribute('data-bs-theme', 'dark');
-                    localStorage.setItem('data-layout-mode', 'dark');
-                  } else {
-                    document.body.removeAttribute('data-layout-mode');
-                    document.documentElement.removeAttribute('data-bs-theme');
-                    localStorage.setItem('data-layout-mode', 'light');
-                  }
-                } catch (e) { /* localStorage may be disabled */ }
-              });
-            });
-          }
         }
         if (document.readyState === 'loading') {
           document.addEventListener('DOMContentLoaded', init);

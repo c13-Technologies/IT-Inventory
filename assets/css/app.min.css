@@ -1,4 +1,4 @@
-@import url(https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&display=swap);
+/* IBM Plex Sans @import removed — zero-CDN policy in this project; default sans-serif fallback is acceptable. */
 [data-bs-theme=dark] .bg-dark {
     background-color: var(--bs-sidebar-dark-bg) !important
 }

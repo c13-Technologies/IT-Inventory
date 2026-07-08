@@ -1,0 +1,30 @@
+<%# views/partials/list-toolbar.ejs
+   Locals:
+     - title       (H5 text)
+     - total       (number, optional)
+     - newUrl      ("/vendors/new")        — used when modalTarget is NOT set
+     - newLabel    ("New Vendor")          — defaults to "New " + title
+     - modalTarget (e.g. '#crudModal')     — optional; if set, renders a
+                    button that calls openCrudModalNew() instead of a link
+     - slug        (e.g. 'vendors')        — required when modalTarget is set
+     - cap         (e.g. 'Vendor')         — required when modalTarget is set
+%>
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h5 class="card-title mb-0">
+    <% if (typeof total === 'number') { %>
+      <%= total %> <%= title.toLowerCase() %><%= total === 1 ? '' : 's' %>
+    <% } else { %>
+      <%= title %>
+    <% } %>
+  </h5>
+  <% if (typeof modalTarget === 'string' && modalTarget) { %>
+    <button type="button" class="btn btn-primary"
+            onclick="openCrudModalNew('<%= slug %>','<%= cap %>')">
+      <i class="bx bx-plus me-1"></i><%= newLabel || 'New ' + title.replace(/s$/, '') %>
+    </button>
+  <% } else if (typeof newUrl === 'string' && newUrl) { %>
+    <a href="<%= newUrl %>" class="btn btn-primary">
+      <i class="bx bx-plus me-1"></i><%= newLabel || 'New ' + title.replace(/s$/, '') %>
+    </a>
+  <% } %>
+</div>

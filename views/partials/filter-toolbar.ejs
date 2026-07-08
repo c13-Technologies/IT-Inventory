@@ -1,0 +1,98 @@
+<%# views/partials/filter-toolbar.ejs
+   Configurable horizontal filter bar. Used on /assets and /vendors.
+   Locals:
+     - filters (array)         — which controls to show. Default: all.
+         Options: 'search', 'status', 'vendor', 'category', 'location', 'assignedOnly'
+     - query                   — req.query from the server (selections preserved)
+     - statusOptions (array)   — status values for the status dropdown. Default: asset statuses.
+     - action (string)         — form action URL. Default: current page path.
+     - resetUrl (string)       — link to clear filters. Default: same as action.
+     - searchPlaceholder       — placeholder text for the search input. Default: "Search…"
+     - categories (array)      — for 'category' filter (array of {id, name})
+     - locations  (array)      — for 'location' filter
+     - vendors    (array)      — for 'vendor' filter (array of {id, name})
+   All selects preserve the user's current selection via `query.<key>`.
+%>
+<%
+var f_list    = (typeof filters !== 'undefined' && filters !== null) ? filters : ['search','status','vendor','category','location','assignedOnly'];
+var f_action  = (typeof action !== 'undefined' && action !== null) ? action : '/assets';
+var f_reset   = (typeof resetUrl !== 'undefined' && resetUrl !== null) ? resetUrl : f_action;
+var f_so      = (typeof statusOptions !== 'undefined' && statusOptions !== null) ? statusOptions : [''];
+var f_ph      = (typeof searchPlaceholder !== 'undefined' && searchPlaceholder !== null) ? searchPlaceholder : 'Search…';
+%>
+<form method="GET" action="<%= f_action %>" class="filter-toolbar">
+  <div class="row g-2 align-items-end">
+
+    <% if (f_list.indexOf('search') !== -1) { %>
+    <div class="col-12 col-md-4 col-lg-3">
+      <label class="form-label small text-muted mb-1">Search</label>
+      <input type="text" name="search" class="form-control form-control-sm"
+             placeholder="<%= f_ph %>"
+             value="<%= (query && query.search) || '' %>">
+    </div>
+    <% } %>
+
+    <% if (f_list.indexOf('status') !== -1) { %>
+    <div class="col-6 col-md-3 col-lg-2">
+      <label class="form-label small text-muted mb-1">Status</label>
+      <select name="status" class="form-select form-select-sm">
+        <% f_so.forEach(function(s) { %>
+          <option value="<%= s %>" <%= (query && query.status) === s ? 'selected' : '' %>><%= s === '' ? 'Any status' : String(s).replace(/_/g, ' ') %></option>
+        <% }); %>
+      </select>
+    </div>
+    <% } %>
+
+    <% if (f_list.indexOf('vendor') !== -1) { %>
+    <div class="col-6 col-md-3 col-lg-2">
+      <label class="form-label small text-muted mb-1">Vendor</label>
+      <select name="vendorId" class="form-select form-select-sm">
+        <option value="">Any vendor</option>
+        <% (vendors || []).forEach(function(v) { %>
+          <option value="<%= v.id %>" <%= (query && query.vendorId) === v.id ? 'selected' : '' %>><%= v.name %></option>
+        <% }); %>
+      </select>
+    </div>
+    <% } %>
+
+    <% if (f_list.indexOf('category') !== -1) { %>
+    <div class="col-6 col-md-3 col-lg-2">
+      <label class="form-label small text-muted mb-1">Category</label>
+      <select name="categoryId" class="form-select form-select-sm">
+        <option value="">Any category</option>
+        <% (categories || []).forEach(function(c) { %>
+          <option value="<%= c.id %>" <%= (query && query.categoryId) === c.id ? 'selected' : '' %>><%= c.name %></option>
+        <% }); %>
+      </select>
+    </div>
+    <% } %>
+
+    <% if (f_list.indexOf('location') !== -1) { %>
+    <div class="col-6 col-md-3 col-lg-2">
+      <label class="form-label small text-muted mb-1">Location</label>
+      <select name="locationId" class="form-select form-select-sm">
+        <option value="">Any location</option>
+        <% (locations || []).forEach(function(l) { %>
+          <option value="<%= l.id %>" <%= (query && query.locationId) === l.id ? 'selected' : '' %>><%= l.name %></option>
+        <% }); %>
+      </select>
+    </div>
+    <% } %>
+
+    <!-- Buttons (always visible) -->
+    <div class="col-12 col-md-auto d-flex align-items-end gap-2">
+      <% if (f_list.indexOf('assignedOnly') !== -1) { %>
+      <div class="form-check mb-0 d-flex align-items-center" style="height:31px">
+        <input class="form-check-input me-1" type="checkbox" id="assignedOnly" name="assignedOnly" value="1" <%= (query && query.assignedOnly) ? 'checked' : '' %>>
+        <label class="form-check-label small text-nowrap" for="assignedOnly">Assigned only</label>
+      </div>
+      <% } %>
+      <button type="submit" class="btn btn-primary btn-sm">
+        <i class="bx bx-search me-1"></i>Apply
+      </button>
+      <a href="<%= f_reset %>" class="btn btn-light btn-sm">
+        <i class="bx bx-reset me-1"></i>Reset
+      </a>
+    </div>
+  </div>
+</form>

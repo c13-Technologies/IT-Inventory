@@ -3,5 +3,21 @@
   "assets": "Assets",
   "assets/new": "New Asset",
   "assets/edit": "Edit Asset",
-  "assets/qr": "Print QR"
+  "assets/qr": "Print QR",
+  "vendors": "Vendors",
+  "locations": "Locations",
+  "categories": "Categories",
+  "users": "Users",
+  "assignments": "Assignments",
+  "maintenance": "Maintenance",
+  "licenses": "Software Licenses",
+  "departments": "Departments",
+  "approvals": "Approvals",
+  "license-seats": "License Seats",
+  "warranty": "Warranty Tracking",
+  "roles": "Roles & Permissions",
+  "audit-log": "Audit Log",
+  "reports": "Reports",
+  "notifications": "Notifications",
+  "webhooks": "Webhooks"
 }

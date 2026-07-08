@@ -5,39 +5,17 @@
 
     <meta charset="utf-8" />
     <base href="/">
-    <!-- Dark/light mode persistence: assets/js/app.js (the Minia theme's main JS, which handles the mode toggle + localStorage) is missing in this project, so the toggle never saves. This inline shim handles init + click. -->
+    <!-- Dark/light mode FOUC prevention: app.js (the Minia theme's master JS) toggles the visual theme but does not persist the choice across reloads, so the small persistence spy in scripts.ejs writes it to localStorage and this block reads it back on the next request. Sets data-bs-theme synchronously in <head> BEFORE first paint on BOTH <html> (Bootstrap CSS selectors) AND <body> (Minia app.js's init branch logic reads from body, so it MUST be set to the saved value to avoid app.js silently flipping to dark when the saved choice is light). -->
     <script>
       (function () {
         try {
-          var KEY = 'data-layout-mode';
-          var saved = localStorage.getItem(KEY);
-          // Set html data attr synchronously in <head> to avoid a flash of light mode (Bootstrap 5.3+).
+          var saved = localStorage.getItem('data-layout-mode');
           if (saved === 'dark') {
             document.documentElement.setAttribute('data-bs-theme', 'dark');
-          }
-          var apply = function () {
-            if (localStorage.getItem(KEY) === 'dark') {
-              document.body.setAttribute('data-layout-mode', 'dark');
-            }
-            var btn = document.getElementById('mode-setting-btn');
-            if (!btn) return;
-            btn.addEventListener('click', function () {
-              var isDark = document.body.getAttribute('data-layout-mode') === 'dark';
-              if (isDark) {
-                document.body.removeAttribute('data-layout-mode');
-                document.documentElement.removeAttribute('data-bs-theme');
-                localStorage.setItem(KEY, 'light');
-              } else {
-                document.body.setAttribute('data-layout-mode', 'dark');
-                document.documentElement.setAttribute('data-bs-theme', 'dark');
-                localStorage.setItem(KEY, 'dark');
-              }
-            });
-          };
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', apply);
+            document.body.setAttribute('data-bs-theme', 'dark');
           } else {
-            apply();
+            // Explicitly set light on body so app.js's `body[data-bs-theme=dark]` branch picks the right init; noop visually because light is the default.
+            document.body.setAttribute('data-bs-theme', 'light');
           }
         } catch (e) { /* localStorage may be disabled */ }
       })();
@@ -48,13 +26,9 @@
     <meta content="Themesbrand" name="author" />
     <!-- App favicon -->
     <link rel="shortcut icon" href="assets/images/favicon.ico">
-    <!-- Icon CSS — project ships only the woff2 font files; load each icon family's CSS from a CDN -->
-    <!-- Boxicons: .bx bx-* classes (notification icons + action buttons) -->
-    <link href="https://cdn.jsdelivr.net/npm/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
-    <!-- Material Design Icons: .mdi mdi-* classes (topbar clock/magnify/chevron/lock/logout/etc) -->
-    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" rel="stylesheet">
-    <!-- Font Awesome 5 Free: .fa fa-* legacy + .fas fa-* solid classes (topbar hamburger) -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+
+    <!-- IBM Plex Sans (Minia's native font — copied from ref/assets/css/app.min.css @import; provides darker, more readable text vs the fallback sans-serif) -->
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
 
     <!-- plugin css -->
     <link href="assets/libs/admin-resources/jquery.vectormap/jquery-jvectormap-1.2.2.css" rel="stylesheet" type="text/css" />
@@ -64,7 +38,8 @@
 
     <!-- Bootstrap Css -->
     <link href="assets/css/bootstrap.min.css" id="bootstrap-style" rel="stylesheet" type="text/css" />
-    <!-- Icons Css (loaded from CDN above; project's local assets/css/icons.min.css is missing) -->
+    <!-- Icons Css: bundles the @font-face declarations for Material Design Icons, Boxicons, and Font Awesome 5; served from assets/css/ with relative ../fonts/ paths. Replaces the previous boxicons/mdi/font-awesome CDN stylesheets (zero-CDN policy). -->
+    <link href="assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <!-- App Css-->
     <link href="assets/css/app.min.css" id="app-style" rel="stylesheet" type="text/css" />
 

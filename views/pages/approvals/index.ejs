@@ -1,0 +1,83 @@
+<%- include('../../partials/head', { title: title }) %>
+
+<body>
+  <div id="layout-wrapper">
+    <%- include('../../partials/topbar') %>
+    <%- include('../../partials/sidebar') %>
+
+    <div class="main-content">
+      <div class="page-content">
+        <div class="container-fluid">
+
+          <div class="row">
+            <div class="col-12">
+              <div class="page-title-box d-sm-flex align-items-center justify-content-between">
+                <h4 class="mb-sm-0 font-size-18"><%= title %></h4>
+                <div class="page-title-right">
+                  <%- include('../../partials/breadcrumb', { items: [
+                    { label: 'Home',       href: '/' },
+                    { label: 'Lifecycle',  href: '/approvals' },
+                    { label: 'Approvals',  href: null },
+                  ] }) %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-body">
+                  <%- include('../../partials/filter-toolbar', { filters: ['search','status'], query: query, statusOptions: (typeof statusOptions !== 'undefined' && statusOptions !== null) ? statusOptions : ['','PENDING','APPROVED','REJECTED','CANCELLED'], action: '/approvals', resetUrl: '/approvals', searchPlaceholder: 'Entity or ID…' }) %>
+
+                  <hr class="mt-3 mb-3">
+
+                  <%- include('../../partials/list-toolbar', { title: 'Approval', total: approvals.length, modalTarget: '#crudModal', slug: 'approvals', cap: 'Approval', newLabel: 'New Approval' }) %>
+
+                  <% if (approvals.length === 0) { %>
+                    <%- include('../../partials/empty-state', { icon: 'bx-check-shield', title: 'No approval requests', message: 'Review pending asset-assign, asset-retire, asset-delete, and user-disable requests. Click "+ New Approval" to add one.' }) %>
+                  <% } else { %>
+                    <div class="table-responsive">
+                      <table class="table table-nowrap align-middle mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Type</th>
+                            <th>Entity</th>
+                            <th>Status</th>
+                            <th>Reason</th>
+                            <th class="text-end">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% approvals.forEach(function(a) { %>
+                            <tr>
+                              <td><span class="badge bg-info-subtle text-info"><%= (a.type || '').replace(/_/g, ' ') %></span></td>
+                              <td><%= a.entityType %> <code class="text-muted"><%= a.entityId %></code></td>
+                              <td><span class="badge bg-<%= a.status === 'APPROVED' ? 'success' : a.status === 'REJECTED' ? 'danger' : a.status === 'CANCELLED' ? 'secondary' : 'warning' %>"><%= a.status %></span></td>
+                              <td class="small text-muted"><%= a.rejectionReason || '—' %></td>
+                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'approvals', id: a.id, capLc: 'approval', modalMode: true }) %></td>
+                            </tr>
+                          <% }); %>
+                        </tbody>
+                      </table>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <% var _apMap = {}; approvals.forEach(function(a) { _apMap[a.id] = a; }); %>
+          <script>window.__CRUD_ROWS__ = <%= JSON.stringify(_apMap) %>;</script>
+
+          <%- include('../../partials/modals/crud-modal', { slug: 'approvals', cap: 'Approval', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
+          <%- include('../../partials/modals/delete-modal') %>
+
+        </div>
+      </div>
+      <%- include('../../partials/footer') %>
+    </div>
+  </div>
+  <%- include('../../partials/scripts', { pageScripts: [] }) %>
+</body>
+</html>

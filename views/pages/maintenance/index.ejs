@@ -1,0 +1,82 @@
+<%- include('../../partials/head', { title: title }) %>
+
+<body>
+  <div id="layout-wrapper">
+    <%- include('../../partials/topbar') %>
+    <%- include('../../partials/sidebar') %>
+
+    <div class="main-content">
+      <div class="page-content">
+        <div class="container-fluid">
+
+          <div class="row">
+            <div class="col-12">
+              <div class="page-title-box d-sm-flex align-items-center justify-content-between">
+                <h4 class="mb-sm-0 font-size-18"><%= title %></h4>
+                <div class="page-title-right">
+                  <%- include('../../partials/breadcrumb', { items: [
+                    { label: 'Home',       href: '/' },
+                    { label: 'Lifecycle',  href: '/maintenance' },
+                    { label: 'Maintenance',href: null },
+                  ] }) %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-12">
+              <div class="card">
+                <div class="card-body">
+                  <%- include('../../partials/filter-toolbar', { filters: ['search','status'], query: query, statusOptions: (typeof statusOptions !== 'undefined' && statusOptions !== null) ? statusOptions : ['','OPEN','IN_PROGRESS','COMPLETED','CLOSED'], action: '/maintenance', resetUrl: '/maintenance', searchPlaceholder: 'Description, vendor, or ticket…' }) %>
+
+                  <hr class="mt-3 mb-3">
+
+                  <%- include('../../partials/list-toolbar', { title: 'Maintenance', total: maintenance.length, newUrl: '/maintenance/new', newLabel: 'New Maintenance' }) %>
+
+                  <% if (maintenance.length === 0) { %>
+                    <%- include('../../partials/empty-state', { icon: 'bx-wrench', title: 'No maintenance records', message: 'Track repairs, upgrades, inspections, and warranty claims here as they happen.' }) %>
+                  <% } else { %>
+                    <% const mStatusColor = function(s){ if(s==='COMPLETED')return'success'; if(s==='IN_PROGRESS')return'primary'; if(s==='CLOSED')return'secondary'; return'warning'; }; %>
+                    <div class="table-responsive">
+                      <table class="table table-nowrap align-middle mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Asset</th>
+                            <th>Type</th>
+                            <th>Vendor</th>
+                            <th>Cost</th>
+                            <th>Status</th>
+                            <th>Started</th>
+                            <th class="text-end">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% maintenance.forEach(function(m) { %>
+                            <tr>
+                              <td><a href="/assets/<%= m.assetId %>" class="text-reset"><% if (m.asset) { %><%= m.asset.assetTag %><% } else { %><code><%= m.assetId %></code><% } %></a></td>
+                              <td><span class="badge bg-info-subtle text-info"><%= (m.type || '').replace(/_/g, ' ') %></span></td>
+                              <td><%= m.vendor ? m.vendor.name : '—' %></td>
+                              <td><%= m.cost ? Number(m.cost).toFixed(2) + ' ' + (m.currency || '') : '—' %></td>
+                              <td><span class="badge bg-<%= mStatusColor(m.status) %>"><%= (m.status || '').replace(/_/g, ' ') %></span></td>
+                              <td><%= m.startedAt ? new Date(m.startedAt).toLocaleDateString() : '—' %></td>
+                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'maintenance', id: m.id, capLc: 'maintenance record' }) %></td>
+                            </tr>
+                          <% }); %>
+                        </tbody>
+                      </table>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <%- include('../../partials/footer') %>
+    </div>
+  </div>
+  <%- include('../../partials/scripts', { pageScripts: [] }) %>
+</body>
+</html>

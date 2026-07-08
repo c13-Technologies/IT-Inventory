@@ -1,0 +1,130 @@
+<%# views/partials/modals/crud-modal.ejs
+   Reusable Bootstrap 5 modal for create/edit CRUD actions on simple entities
+   (≤7 fields). Renders crud-form in bare mode inside the modal body.
+
+   Locals:
+     - slug:    'vendors' | 'locations' | etc.
+     - cap:     'Vendor' | 'Location' | etc.
+     - schema:  [{key, label, type, ...}]  — same as crud-form
+     - sources: { categories:[...], users:[...], ... }
+
+   The modal is driven by JavaScript:
+     - New:  set modal title to "New <cap>", clear form, action = POST /<slug>
+     - Edit: set title "Edit <cap>", populate form from __CRUD_ROWS__[id], action = POST /<slug>/:id
+     - Delete: uses the separate #deleteModal
+
+   Field IDs use the cf- prefix (cf-name, cf-email, …) so the populate script
+   and error-display script both target the same elements.
+%>
+<div class="modal fade" id="crudModal" tabindex="-1" aria-labelledby="crudModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <form method="POST" action="/<%= slug %>" id="crudModalForm">
+        <!-- hidden field so the server knows to re-render the list page on validation error -->
+        <input type="hidden" name="_modal" value="1">
+        <div class="modal-header">
+          <h5 class="modal-title" id="crudModalLabel">
+            <i class="bx bx-plus me-1"></i>New <%= cap %>
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" style="max-height:65vh; overflow-y:auto">
+          <%- include('../crud-form', { slug, schema, row: (typeof modalRow !== 'undefined' ? modalRow : {}), sources, errors: (typeof modalErrors !== 'undefined' ? modalErrors : {}), mode: (typeof modalMode !== 'undefined' ? modalMode : 'new'), bare: true }) %>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="crudModalSubmit">
+            <i class="bx bx-plus me-1"></i>Create
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%# Inline JS to drive the modal: open for new (clear form), open for edit
+   (populate from __CRUD_ROWS__), and apply server-side validation errors. %>
+<script>
+(function() {
+  var modal    = document.getElementById('crudModal');
+  var form     = document.getElementById('crudModalForm');
+  var titleEl  = document.getElementById('crudModalLabel');
+  var submitBtn= document.getElementById('crudModalSubmit');
+  var modalBs  = modal ? new bootstrap.Modal(modal) : null;
+
+  // ── Open for "New" ──────────────────────────────────────────
+  window.openCrudModalNew = function(slug, cap) {
+    if (!modalBs) return;
+    form.action = '/' + slug;
+    form.querySelector('input[name=\"_modal\"]').value = '1';
+    titleEl.innerHTML = '<i class=\"bx bx-plus me-1\"></i>New ' + cap;
+    submitBtn.innerHTML = '<i class=\"bx bx-plus me-1\"></i>Create';
+    // Clear form
+    form.querySelectorAll('input:not([type=hidden]), textarea, select').forEach(function(el) {
+      if (el.tagName === 'SELECT') el.selectedIndex = 0;
+      else if (el.type === 'checkbox') el.checked = false;
+      else el.value = '';
+    });
+    // Clear error feedback
+    form.querySelectorAll('.is-invalid').forEach(function(el) { el.classList.remove('is-invalid'); });
+    form.querySelectorAll('.invalid-feedback').forEach(function(el) { el.remove(); });
+    modalBs.show();
+  };
+
+  // ── Open for "Edit" ─────────────────────────────────────────
+  window.openCrudModalEdit = function(slug, cap, rowId) {
+    if (!modalBs) return;
+    var rows = window.__CRUD_ROWS__ || {};
+    var row  = rows[rowId];
+    if (!row) return;
+    form.action = '/' + slug + '/' + rowId;
+    form.querySelector('input[name=\"_modal\"]').value = '1';
+    titleEl.innerHTML = '<i class=\"bx bx-edit me-1\"></i>Edit ' + cap;
+    submitBtn.innerHTML = '<i class=\"bx bx-save me-1\"></i>Save changes';
+    // Clear error feedback
+    form.querySelectorAll('.is-invalid').forEach(function(el) { el.classList.remove('is-invalid'); });
+    form.querySelectorAll('.invalid-feedback').forEach(function(el) { el.remove(); });
+    // Populate fields — text/email/number/date/textarea by id="cf-<key>", selects by value
+    Object.keys(row).forEach(function(key) {
+      var el = form.querySelector('[name=\"' + key + '\"]');
+      if (!el) {
+        el = form.querySelector('#cf-' + key);
+      }
+      if (!el) return;
+      if (el.tagName === 'SELECT') {
+        var val = String(row[key] || '');
+        for (var i = 0; i < el.options.length; i++) {
+          if (el.options[i].value === val) { el.selectedIndex = i; break; }
+        }
+      } else if (el.type === 'checkbox') {
+        el.checked = !!row[key];
+      } else {
+        el.value = row[key] != null ? row[key] : '';
+      }
+    });
+    modalBs.show();
+  };
+
+  // ── Open for "Delete" confirmation ──────────────────────────
+  window.openDeleteModal = function(slug, rowId, label) {
+    var dm = document.getElementById('deleteModal');
+    if (!dm) return;
+    document.getElementById('deleteModalForm').action = '/' + slug + '/' + rowId + '/delete';
+    document.getElementById('deleteModalLabel').textContent = 'Delete ' + (label || 'item') + '?';
+    document.getElementById('deleteModalBody').textContent = 'This action cannot be undone. Are you sure you want to delete this ' + (label || 'item') + '?';
+    new bootstrap.Modal(dm).show();
+  };
+
+  // ── Auto-open on server error (page rendered with modalErrors) ──
+  <% if (typeof modalErrors !== 'undefined' && modalErrors && Object.keys(modalErrors).length > 0) { %>
+    document.addEventListener('DOMContentLoaded', function() {
+      <% if (typeof modalMode !== 'undefined' && modalMode === 'edit') { %>
+        form.action = '/<%= slug %>/<%= (typeof modalRow !== 'undefined' && modalRow) ? modalRow.id || '' : '' %>';
+        titleEl.innerHTML = '<i class=\"bx bx-edit me-1\"></i>Edit <%= cap %>';
+        submitBtn.innerHTML = '<i class=\"bx bx-save me-1\"></i>Save changes';
+      <% } %>
+      modalBs.show();
+    });
+  <% } %>
+})();
+</script>

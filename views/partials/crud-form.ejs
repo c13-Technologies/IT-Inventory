@@ -1,0 +1,108 @@
+<%# views/partials/crud-form.ejs
+   Required locals:
+     - slug:     string (used in <form action="/<slug>/...">)
+     - mode:     'new' | 'edit'
+     - schema:   [{key, label, type, required, options?, source?, step?}]
+     - row:      object with current field values ({} for new)
+     - sources:  { categories:[...], users:[...], vendors:[...], ... } for select-fk lookups
+     - errors:   { fieldKey: 'Message' }  (optional)
+     - bare:     boolean (optional) — when true, skip the outer <form> tag and submit/cancel
+                 buttons. Modal wrappers use bare mode to render just the field inputs.
+   The submit URL is /<slug> for mode=new and /<slug>/<row.id> for mode=edit.
+%>
+<% var isBare = (typeof bare !== 'undefined' && bare); %>
+<% if (!isBare) { %>
+<form method="POST" action="/<%= slug %><%= mode === 'edit' && row && row.id ? '/' + row.id : '' %>" class="crud-form">
+<% } %>
+  <% if (errors && errors._global) { %>
+    <div class="alert alert-danger"><i class="bx bx-error-circle me-1"></i><%= errors._global %></div>
+  <% } %>
+
+  <% (schema || []).forEach(function(field) { %>
+    <div class="mb-3">
+      <label class="form-label" for="cf-<%= field.key %>">
+        <%= field.label %>
+        <% if (field.required) { %><span class="text-danger ms-1">*</span><% } %>
+      </label>
+
+      <% if (field.type === 'select') { %>
+        <select id="cf-<%= field.key %>" name="<%= field.key %>"
+                class="form-select <%= errors && errors[field.key] ? 'is-invalid' : '' %>"
+                <%= field.required ? 'required' : '' %>
+                <%= field.readonly ? 'disabled' : '' %>>
+          <% if (!field.required) { %><option value="">— None —</option><% } %>
+          <% (field.options || []).forEach(function(opt) { %>
+            <option value="<%= opt %>" <%= String(row[field.key] || '') === opt ? 'selected' : '' %>><%= String(opt).replace(/_/g, ' ') %></option>
+          <% }); %>
+        </select>
+
+      <% } else if (field.type === 'select-fk') { %>
+        <select id="cf-<%= field.key %>" name="<%= field.key %>"
+                class="form-select <%= errors && errors[field.key] ? 'is-invalid' : '' %>"
+                <%= field.required ? 'required' : '' %>
+                <%= field.readonly ? 'disabled' : '' %>>
+          <% if (!field.required) { %><option value="">— None —</option><% } %>
+          <% ((sources && sources[field.source]) || []).forEach(function(item) { %>
+            <option value="<%= item.id %>" <%= String(row[field.key] || '') === item.id ? 'selected' : '' %>><%= item.name || item.fullName || item.id %></option>
+          <% }); %>
+        </select>
+
+      <% } else if (field.type === 'textarea') { %>
+        <textarea id="cf-<%= field.key %>" name="<%= field.key %>" rows="3"
+                  class="form-control <%= errors && errors[field.key] ? 'is-invalid' : '' %>"
+                  <%= field.required ? 'required' : '' %>
+                  <%= field.readonly ? 'readonly' : '' %>><%= row[field.key] || '' %></textarea>
+
+      <% } else if (field.type === 'number') { %>
+        <input type="number" id="cf-<%= field.key %>" name="<%= field.key %>"
+               step="<%= field.step || 'any' %>"
+               class="form-control <%= errors && errors[field.key] ? 'is-invalid' : '' %>"
+               value="<%= row[field.key] != null && row[field.key] !== '' ? row[field.key] : '' %>"
+               <%= field.required ? 'required' : '' %>
+               <%= field.readonly ? 'readonly' : '' %>>
+
+      <% } else if (field.type === 'date') { %>
+        <input type="date" id="cf-<%= field.key %>" name="<%= field.key %>"
+               class="form-control <%= errors && errors[field.key] ? 'is-invalid' : '' %>"
+               value="<%= row[field.key] ? String(row[field.key]).slice(0, 10) : '' %>"
+               <%= field.required ? 'required' : '' %>
+               <%= field.readonly ? 'readonly' : '' %>>
+
+      <% } else if (field.type === 'email') { %>
+        <input type="email" id="cf-<%= field.key %>" name="<%= field.key %>"
+               class="form-control <%= errors && errors[field.key] ? 'is-invalid' : '' %>"
+               value="<%= row[field.key] || '' %>"
+               <%= field.required ? 'required' : '' %>
+               <%= field.readonly ? 'readonly' : '' %>>
+
+      <% } else { %>
+        <input type="text" id="cf-<%= field.key %>" name="<%= field.key %>"
+               class="form-control <%= errors && errors[field.key] ? 'is-invalid' : '' %>"
+               value="<%= row[field.key] || '' %>"
+               <%= field.required ? 'required' : '' %>
+               <%= field.readonly ? 'readonly' : '' %>>
+
+      <% } %>
+
+      <% if (errors && errors[field.key]) { %>
+        <div class="invalid-feedback d-block"><%= errors[field.key] %></div>
+      <% } %>
+    </div>
+  <% }); %>
+
+<% if (!isBare) { %>
+  <div class="d-flex gap-2 mt-4">
+    <button type="submit" class="btn btn-primary">
+      <i class="bx <%= mode === 'edit' ? 'bx-save' : 'bx-plus' %> me-1"></i>
+      <%= mode === 'edit' ? 'Save changes' : 'Create' %>
+    </button>
+    <a href="/<%= slug %>" class="btn btn-light">Cancel</a>
+    <% if (mode === 'edit' && row && row.id) { %>
+      <button type="button" class="btn btn-outline-danger ms-auto"
+              onclick="if (confirm('Delete this <%= capLc || slug.replace(/s$/, '') %>? This cannot be undone.')) document.getElementById('deleteForm').submit();">
+        <i class="bx bx-trash me-1"></i>Delete
+      </button>
+    <% } %>
+  </div>
+</form>
+<% } %>

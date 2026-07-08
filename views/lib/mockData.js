@@ -306,6 +306,12 @@ const maintenance = [
   { id: id('mnt', 3), assetId: assets[3].id, vendorId: vendors[1].id, type: 'PREVENTIVE',     description: 'Annual firmware update + dust filter cleaning',  cost: 250.00, currency: 'USD', startedAt: '2024-11-10T08:00:00Z', completedAt: '2024-11-10T12:00:00Z',         ticketNumber: 'PM-2024-014', status: 'COMPLETED' },
 ];
 
+// Empty collections — schemas exist but no seed data. CRUD endpoints will
+// populate these. Modules that want richer defaults can add them later.
+const licenses   = [];
+const departments = [];
+const approvals  = [];
+
 // ---------------------------------------------------------------------------
 // Helpers (denormalize for the UI)
 // ---------------------------------------------------------------------------
@@ -317,6 +323,7 @@ const byIds = {
   location:   byId(locations),
   user:       byId(users),
   assignment: byId(assignments),
+  asset:      byId(assets),
 };
 
 function denormalizeAsset(a) {
@@ -382,17 +389,138 @@ function getMaintenanceForAsset(assetId) {
     .sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''));
 }
 
-module.exports = {
+// ----------------------------------------------------------------------
+// Global list accessors (added for the new sidebar nav — see views/partials/sidebar.ejs).
+// getAssignmentsForAsset / getMaintenanceForAsset remain for the asset-detail page.
+// ----------------------------------------------------------------------
+function getAssignments() {
+  return assignments
+    .slice()
+    .map((a) => ({ ...a, user: byIds.user(a.userId), asset: byIds.asset(a.assetId) }))
+    .sort((a, b) => (b.assignedAt || '').localeCompare(a.assignedAt || ''));
+}
+
+function getMaintenance() {
+  return maintenance
+    .slice()
+    .map(denormalizeMaintenance)
+    .sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''));
+}
+
+// ----------------------------------------------------------------------
+// CRUD factory: schema-driven create/update/delete for the 9 sidebar
+// nav modules. server.js route handlers call e.g. mockData.createVendor(input);
+// mutators share validation, FK-aware delete protection, and id generation.
+// We build a single exports object so the mutators are NOT lost to a
+// final `module.exports = {...}` reassignment.
+// ----------------------------------------------------------------------
+const schemas = require('./schemas');
+
+const CRUD_REGISTRY = {
+  vendors:     { arr: vendors,      name: 'Vendor' },
+  locations:   { arr: locations,    name: 'Location' },
+  categories:  { arr: categories,   name: 'Category' },
+  users:       { arr: users,        name: 'User' },
+  assignments: { arr: assignments,  name: 'Assignment' },
+  maintenance: { arr: maintenance,  name: 'Maintenance' },
+  licenses:    { arr: licenses,     name: 'License' },
+  departments: { arr: departments,  name: 'Department' },
+  approvals:   { arr: approvals,    name: 'Approval' },
+};
+
+// FK references that would block a delete of the targeted entity.
+// Keyed by the SLUG being deleted; each entry holds a predicate(id) and
+// a human-readable label that becomes the error message.
+const FK_DELETE_BLOCKERS = {
+  categories:  [id => assets.some(a => a.categoryId === id),  'still assigned to one or more assets'],
+  vendors:     [id => assets.some(a => a.vendorId === id) || maintenance.some(m => m.vendorId === id), 'still referenced by assets or maintenance records'],
+  locations:   [id => assets.some(a => a.locationId === id),  'still holding one or more assets'],
+  users:       [id => assets.some(a => a.assignedToId === id) || assignments.some(a => a.userId === id), 'still assigned to assets or holding assignments'],
+};
+
+const crudExports = {};
+for (const slug of Object.keys(CRUD_REGISTRY)) {
+  const { arr, name } = CRUD_REGISTRY[slug];
+  const schema = (schemas[slug]) || [];
+
+  function validateFor(_slug, _arr, input) {
+    const errors = {};
+    const sch = (schemas[_slug]) || [];
+    sch.forEach(f => {
+      if (!f.required) return;
+      const v = input ? input[f.key] : undefined;
+      if (v === undefined || v === '' || v === null) errors[f.key] = `${f.label} is required`;
+    });
+    return errors;
+  }
+  // Capture slug + arr per-iteration so the closures reference the right values.
+  const validate = (input) => validateFor(slug, arr, input);
+
+  crudExports['create' + name] = function(input) {
+    const errors = validate(input || {});
+    if (Object.keys(errors).length) return { success: false, errors };
+    const newRow = {
+      id: id(slug.slice(0, 3), arr.length + 1),
+      ...input,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      version: 0,
+    };
+    arr.push(newRow);
+    return { success: true, data: newRow };
+  };
+
+  crudExports['update' + name] = function(idVal, patch) {
+    const row = arr.find(r => r.id === idVal);
+    if (!row) return { success: false, errors: { _global: 'Not found' } };
+    const errors = validate(patch || {});
+    if (Object.keys(errors).length) return { success: false, errors };
+    Object.assign(row, patch, { updatedAt: new Date().toISOString(), version: (row.version || 0) + 1 });
+    return { success: true, data: row };
+  };
+
+  crudExports['delete' + name] = function(idVal) {
+    const idx = arr.findIndex(r => r.id === idVal);
+    if (idx === -1) return { success: false, errors: { _global: 'Not found' } };
+    const blocker = FK_DELETE_BLOCKERS[slug];
+    if (blocker) {
+      const [check, label] = blocker;
+      if (check(idVal)) {
+        return { success: false, errors: { _global: 'Cannot delete: ' + label + '.' } };
+      }
+    }
+    arr.splice(idx, 1);
+    return { success: true };
+  };
+
+  crudExports['get' + name + 'ById'] = function(idVal) {
+    return arr.find(r => r.id === idVal) || null;
+  };
+
+  crudExports['list' + name + 's'] = function() {
+    return arr.slice();
+  };
+
+  // Per-slug listing getter aliases (matches what server.js getSources() expects).
+  if (!crudExports['get' + name + 's']) {
+    crudExports['get' + name + 's'] = function() { return arr.slice(); };
+  }
+}
+
+module.exports = Object.assign({}, {
   // Assets
   getAssets,
   getAssetById,
   getAssignmentsForAsset,
   getMaintenanceForAsset,
-  // Dropdowns
+  // Global list views
+  getAssignments,
+  getMaintenance,
+  // Dropdowns / directory
   getCategories: () => categories,
-  getVendors:   () => vendors,
-  getLocations: () => locations,
-  getUsers:     () => users,
+  getVendors:    () => vendors,
+  getLocations:  () => locations,
+  getUsers:      () => users,
   // Constants
   AssetStatus: {
     IN_STOCK:  'IN_STOCK',
@@ -401,4 +529,4 @@ module.exports = {
     RETIRED:   'RETIRED',
     LOST:      'LOST',
   },
-};
+}, crudExports);
