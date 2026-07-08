@@ -6,29 +6,37 @@
 ![Status](https://img.shields.io/badge/status-in%20development-yellow)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
-![Postgres](https://img.shields.io/badge/postgres-15%2B-blue)
-![PRs](https://img.shields.io/badge/PRs-welcome-brightgreen)
+![Postgres](https://img.shields.io/badge/postgres-16-blue)
 
-<!-- TODO: Replace with a real dashboard screenshot once the UI is wired up to the API -->
-<p align="center">
-  <em>(Dashboard screenshot coming once the API is live)</em>
-</p>
-
-Track the full lifecycle of every laptop, monitor, phone, license, and peripheral in your org — from purchase to retirement — with role-based access, an approval workflow for sensitive actions, and a flexible JSONB schema for asset-specific specs.
+Track the full lifecycle of every laptop, monitor, phone, license, and peripheral in your org — from procurement to retirement — with role-based access control, audit logging, and a flexible JSONB schema for asset-specific specs.
 
 ## Features
 
-- **Full asset lifecycle** — procurement, assignment, maintenance, retirement, disposal
-- **Multi-tenant SaaS** — shared Postgres DB with `tenant_id` on every row; every org gets its own URL prefix (`/t/<slug>/...`)
-- **5 built-in roles** — Super Admin, IT Manager, IT Support, Department Head, Employee
-- **Two-step approval workflow** for asset assign / retire / delete and user disable
-- **Flexible asset attributes** via JSONB (e.g. `cpu: "i7"`, `ram_gb: 32`) with a GIN index for fast search
-- **Optimistic locking** via a `version` column on every mutable entity
-- **In-app + email + Slack/Teams notifications** for approvals, expiring warranties, expiring licenses
-- **Audit log** with before/after JSONB snapshots on every mutating request
-- **QR / barcode labels** per asset (printable)
-- **CSV import / export** for bulk operations
-- **Reports** — assets by status / location / category, depreciation, utilization, cost-by-vendor
+### Implemented
+
+- **Asset inventory** — create, view, edit, and filter assets with pagination, search, and status/category/location/vendor filters
+- **Directory management** — vendors, locations, categories, users, and departments with full CRUD via modals
+- **Lifecycle tracking** — assignments (check-out/check-in with history) and maintenance records (repair, upgrade, inspection)
+- **Inventory modules** — software licenses and license seat tracking
+- **PRO pages** — warranty tracking (active/expiring/expired derived from asset dates), roles & permissions viewer, audit log, notifications stub, webhooks stub
+- **Authentication** — bcrypt password hashing, express-session with 24h expiry, session fixation prevention, login redirect back to intended page
+- **Role-based access control (RBAC)** — 4 roles × 12 permissions: IT Manager (full), IT Support (assets+lifecycle write, directory read), Department Head (read-only), Employee (assets+lifecycle read)
+- **Audit logging** — automatic before/after snapshots on every create, update, and delete across all 9 CRUD entities
+- **Profile page** — view account details, change password with validation
+- **Last-login tracking** — `lastLoginAt` updated on every successful login
+- **Split-panel login page** — Minia auth layout with testimonial carousel, password visibility toggle, demo account badges
+- **RBAC-aware sidebar** — menu sections conditionally shown/hidden based on user permissions
+- **User-aware topbar** — shows logged-in user name, role, profile link, and sign-out
+- **Seed data** — 32 real-world records: 1 tenant, 4 roles, 2 departments, 4 users, 5 vendors, 4 locations, 6 categories, 8 assets, 3 assignments, 3 maintenance records
+
+### Planned
+
+- Multi-tenant onboarding (signup flow, tenant CRUD)
+- Approval workflow for asset assign / retire / delete
+- Email + Slack/Teams notifications
+- QR / barcode label generation per asset
+- CSV import / export for bulk operations
+- Reports — assets by status/location/category, depreciation, utilization
 
 ## Tech stack
 
@@ -36,44 +44,52 @@ Track the full lifecycle of every laptop, monitor, phone, license, and periphera
 |---|---|
 | Runtime | Node.js ≥ 18 |
 | Web framework | Express 4 |
-| Database | PostgreSQL 15+ |
+| Database | PostgreSQL 16 (Docker) |
 | ORM | Prisma 5 |
-| Auth | JWT + bcrypt (sessions later) |
-| Templating | EJS partials (layout only) |
+| Auth | bcrypt + express-session |
+| Templating | EJS partials (head, topbar, sidebar, footer, scripts) |
 | Frontend | jQuery + Bootstrap 5 (Minia template) |
-| Charts | ApexCharts |
-| Email | Resend |
-| File uploads | Multer → local disk (`/uploads`) |
-| Background jobs | node-cron (in-process for v1) |
+| Charts | ApexCharts, Sparklines, jVectorMap |
 
 ## Project structure
 
 ```
 .
-├── server.js                  # Express bootstrap (auto-fallback port)
+├── server.js                  # Express app — all routes, auth, RBAC, CRUD
 ├── package.json
 ├── .env                       # local secrets (gitignored)
 ├── .env.example               # template for new contributors
-├── .gitignore
+├── docker-compose.yml         # PostgreSQL 16 container
 ├── prisma/
 │   ├── schema.prisma          # 22 models, 14 enums, multi-tenant
-│   └── migrations/            # generated by `prisma migrate dev`
-├── views/                     # EJS partials + per-page templates
-│   ├── partials/              # sidebar, topbar, footer, head
-│   └── pages/                 # one EJS per page
+│   ├── migrations/            # baseline init migration
+│   └── seed.js                # 32 sample records with bcrypt passwords
+├── views/
+│   ├── partials/              # head, topbar, sidebar, footer, scripts, breadcrumb, modals, data-table, empty-state
+│   ├── pages/                 # one EJS per page (30+ pages)
+│   │   ├── auth-login.ejs     # split-panel login with testimonial carousel
+│   │   ├── profile.ejs        # user profile + change password
+│   │   ├── assets/            # index, detail, edit, new, qr
+│   │   ├── vendors/           # index, detail, edit, new
+│   │   ├── (locations, categories, users, assignments, maintenance, licenses, departments, approvals, license-seats, warranty, roles, audit-log, reports, notifications, webhooks)
+│   │   └── index.ejs          # dashboard
+│   └── lib/
+│       ├── prismaData.js      # async Prisma data layer (drop-in for mockData)
+│       ├── mockData.js        # original in-memory mock data (kept for reference)
+│       └── schemas.js         # field shapes for all CRUD entities
+├── assets/                    # Minia static assets (CSS, JS, images, fonts, libs)
 ├── docs/
 │   └── erd.md                 # Mermaid ERD — source of truth for the schema
-├── assets/                    # Minia static assets (CSS, JS, images, fonts, libs)
-├── *.html                     # Minia template pages (auth, dashboard, etc.)
-└── uploads/                   # user-uploaded photos (gitignored)
+├── scripts/                   # dev utility scripts
+└── ref/                       # reference HTML from Minia template
 ```
 
 ## Quickstart
 
 ### Prerequisites
 
-- **Node.js ≥ 18** (tested on Node 24)
-- **PostgreSQL 15+** (locally via Docker, or managed via Supabase / Neon / Railway)
+- **Node.js ≥ 18**
+- **Docker** (for PostgreSQL) or a running Postgres 16 instance
 
 ### 1. Clone & install
 
@@ -87,117 +103,83 @@ npm install
 
 ```bash
 cp .env.example .env
-# then edit .env with your real values
+# edit .env with your database URL and secrets
 ```
 
-At minimum, set:
-
-| Var | Why |
-|---|---|
-| `DATABASE_URL` | Postgres connection string |
-| `JWT_SECRET` | Random 32+ char string for signing tokens |
-| `WEBHOOK_ENCRYPTION_KEY` | Base64-encoded 32-byte AES-256-GCM key (generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`) |
-
-### 3. Start Postgres (Docker, dev-only)
+### 3. Start Postgres
 
 ```bash
-npm run db:up
+npm run db:up        # starts PostgreSQL 16 in Docker
 ```
 
-> **First time only:** if you previously created the container with `docker run --name it-inventory-pg ...`, remove it first so Compose can claim the name: `docker rm -f it-inventory-pg` (your data in the `pgdata` named volume is untouched).
-
-Other DB scripts:
-
-| Command | What it does |
-|---|---|
-| `npm run db:up` | Start the Postgres container in the background |
-| `npm run db:down` | Stop the container (data in `pgdata` preserved) |
-| `npm run db:reset` | Stop, wipe the `pgdata` volume, restart, and re-apply the Prisma schema |
-| `npm run db:logs` | Tail the Postgres container logs |
-| `npm run db:psql` | Open a psql shell inside the container |
-
-### 4. Apply the schema
+### 4. Apply schema & seed
 
 ```bash
-npx prisma db push     # apply prisma/schema.prisma to the dev DB
-# (coming soon) npx prisma db seed    # roles, permissions, demo tenant
+npx prisma db push   # creates all 22 tables
+npm run db:seed      # populates with 32 sample records
 ```
 
 ### 5. Run
 
 ```bash
-npm run dev          # nodemon, auto-reload
-# or
-npm start            # production-style
+npm start            # http://127.0.0.1:3000
 ```
 
-Then open <http://127.0.0.1:3000/>.
+## Demo accounts
+
+All accounts use password: `password123`
+
+| Name | Email | Role |
+|---|---|---|
+| Alex Bytestorm | alex.bytestorm@c13-tech.com | IT Manager |
+| Billy Nick | billy.nick@c13-tech.com | IT Support |
+| Lydia Acheng | lydia.acheng@c13-tech.com | Employee |
+| Sande Ochieno | sande.ochieno@c13-tech.com | Department Head |
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
-| `npm start` | Start the server with Node |
-| `npm run dev` | Start with nodemon (auto-reload on file changes) |
-| `npm run serve` | Alias for `npm start` |
-| `npm run db:up` | Start the Postgres container |
-| `npm run db:down` | Stop the Postgres container |
-| `npm run db:reset` | Wipe the volume + restart + re-apply the Prisma schema |
+| `npm start` | Start the server |
+| `npm run dev` | Start with nodemon (auto-reload) |
+| `npm run db:up` | Start Postgres container |
+| `npm run db:down` | Stop Postgres container |
+| `npm run db:reset` | Wipe + restart + re-apply schema |
+| `npm run db:seed` | Seed the database with sample data |
 | `npm run db:logs` | Tail Postgres logs |
 | `npm run db:psql` | Open psql inside the container |
-| `npx prisma format` | Auto-format `prisma/schema.prisma` |
-| `npx prisma validate` | Validate the schema syntax and relations |
-| `npx prisma migrate dev` | Generate and apply migrations (dev) |
-| `npx prisma migrate deploy` | Apply pending migrations (prod) |
-| `npx prisma studio` | Open the visual DB browser at <http://localhost:5555> |
-| `npx prisma generate` | Regenerate the Prisma client |
+| `npx prisma studio` | Visual DB browser at http://localhost:5555 |
 
-## Environment variables
+## RBAC — permissions matrix
 
-| Var | Required | Default | Notes |
-|---|---|---|---|
-| `DATABASE_URL` | ✅ | — | Postgres connection string the app uses |
-| `POSTGRES_USER` | ✅ (compose) | `postgres` | Read by `docker-compose.yml` when starting the dev DB |
-| `POSTGRES_PASSWORD` | ✅ (compose) | — | Must match the password in `DATABASE_URL` |
-| `POSTGRES_DB` | ✅ (compose) | `inventory_dev` | Read by `docker-compose.yml` when creating the container |
-| `JWT_SECRET` | ✅ | — | 32+ char random string |
-| `WEBHOOK_ENCRYPTION_KEY` | ✅ | — | 32-byte key, base64-encoded |
-| `RESEND_API_KEY` | ❌ | — | For outbound email (sign up at <https://resend.com>) |
-| `PORT` | ❌ | `3000` | Auto-falls back to `3001`, `3002`, … if busy (up to 10 ports) |
-| `HOST` | ❌ | `127.0.0.1` | Set to `0.0.0.0` to expose on the LAN |
-| `NODE_ENV` | ❌ | `development` | Set to `production` in prod |
-
-## Roadmap
-
-- [x] Minia template wired into a Node.js + Express server
-- [x] Prisma schema with 22 models, 14 enums, full multi-tenant design
-- [x] `.env` template with placeholder secrets
-- [x] Initial commit pushed to GitHub
-- [ ] **Phase 0** — auth + tenant middleware + super-admin tenant CRUD
-- [ ] **Phase 1** — asset CRUD + assignment + dashboard (real data)
-- [ ] **Phase 2** — vendors, locations, categories, maintenance, licenses, QR labels
-- [ ] **Phase 3** — reports, audit log, CSV import/export
-- [ ] **Phase 4** — email notifications, approval workflow UI, 2FA, SSO
+| Permission | IT Manager | IT Support | Dept Head | Employee |
+|---|---|---|---|---|
+| assets:read | ✓ | ✓ | ✓ | ✓ |
+| assets:write | ✓ | ✓ | — | — |
+| lifecycle:read | ✓ | ✓ | ✓ | ✓ |
+| lifecycle:write | ✓ | ✓ | — | — |
+| directory:read | ✓ | ✓ | ✓ | — |
+| directory:write | ✓ | — | — | — |
+| inventory:read | ✓ | ✓ | — | — |
+| inventory:write | ✓ | — | — | — |
+| admin:read | ✓ | ✓ | — | — |
+| admin:write | ✓ | — | — | — |
+| communications:read | ✓ | ✓ | — | — |
+| communications:write | ✓ | — | — | — |
 
 ## Architecture
 
-The schema, role/permission matrix, page-by-page UX, and approval state machine are all documented in [`docs/erd.md`](docs/erd.md). Start there if you want to understand the data model.
-
 Key design decisions:
 
-- **Multi-tenant** — shared DB with a `tenant_id` column on every tenant-scoped table; tenant resolved from the URL prefix `/t/<slug>/`.
-- **Optimistic locking** — every mutable entity has a `version Int @default(0)` column; updates require the caller to send the current version or get a `409 Conflict`.
-- **Two-step approval** — assign / retire / delete / user-disable all go through `approval_requests`; direct mutations return `409`.
-- **Soft delete via status enums** — never `DELETE FROM`; use `UserStatus.DISABLED`, `AssetStatus.RETIRED`, etc.
-- **Cuid IDs** — collision-resistant, URL-safe, sortable.
-- **Decimal(12, 2) money** with a `currency` snapshot column on every cost.
-- **JSONB for flexibility** — `assets.attributes`, `tenants.settings`, `audit_log.before/after`, `approval_requests.payload`, `webhook_subscriptions.events`.
-- **EJS partials for layout** — the Minia sidebar and topbar are server-rendered with the tenant slug injected; page bodies stay as static HTML.
-- **Global `/assets` route** — static files live at the root regardless of the `/t/<slug>/` page prefix, so Minia's relative asset paths still resolve.
-
-## Contributing
-
-PRs welcome. Open an issue first for larger changes. The schema is the contract — propose changes there with a migration in hand.
+- **Multi-tenant** — shared DB with `tenant_id` on every tenant-scoped table; tenant resolved from session at login
+- **Session auth** — express-session with memory store (swap to Redis/DB for production); session regenerated on login and password change
+- **RBAC middleware** — `can(permission)` factory returns 403 on forbidden access; applied to all 30+ routes + CRUD loop
+- **Audit logging** — fire-and-forget writes to `audit_log` with before/after JSONB snapshots on every mutating operation
+- **Prisma ORM** — type-safe queries, lazy connection pooling, migration tracking
+- **EJS server-rendered** — sidebar, topbar, and page content rendered server-side with permission-aware conditionals
+- **Soft delete via status enums** — `AssetStatus.RETIRED`, `UserStatus.DISABLED`, etc.
+- **Decimal(12,2) money** with currency snapshot on every cost field
+- **JSONB for flexibility** — `assets.attributes`, `tenants.settings`, `audit_log.before/after`
 
 ## License
 
@@ -205,7 +187,7 @@ MIT
 
 ## Acknowledgments
 
-- UI built on the [Minia](https://themesbrand.com/minia/) admin template by Themesbrand.
-- Charts by [ApexCharts](https://apexcharts.com/).
-- Icons by [Boxicons](https://boxicons.com/), [Font Awesome](https://fontawesome.com/), and [Material Design Icons](https://materialdesignicons.com/).
-- Map by [jVectorMap](https://jvectormap.com/).
+- UI built on the [Minia](https://themesbrand.com/minia/) admin template by Themesbrand
+- Charts by [ApexCharts](https://apexcharts.com/)
+- Icons by [Boxicons](https://boxicons.com/), [Font Awesome](https://fontawesome.com/), and [Material Design Icons](https://materialdesignicons.com/)
+- Map by [jVectorMap](https://jvectormap.com/)
