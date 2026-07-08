@@ -108,6 +108,8 @@ app.post('/login', async (req, res) => {
     if (!valid) {
       return res.status(401).render('pages/auth-login', { title: 'Login', error: 'Invalid email or password.', message: null });
     }
+    // Update lastLoginAt — fire-and-forget so it doesn't delay the redirect
+    prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});
     // Regenerate session to prevent session fixation
     const redirectTo = req.session.returnTo || '/';
     req.session.regenerate(() => {
