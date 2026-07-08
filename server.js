@@ -215,6 +215,7 @@ const PAGE_PERMISSIONS = {
   reports:        'admin:read',
   notifications:  'communications:read',
   webhooks:       'communications:read',
+  profile:         null,            // profile — auth-only
 };
 
 // Layout locals for all rendered pages — inject user info + permissions
@@ -234,6 +235,90 @@ app.use((req, res, next) => {
 app.use((req, _res, next) => {
   prismaData.setRequest(req);
   next();
+});
+
+// Profile page — all authenticated users can see their own profile
+app.get('/profile', requireAuth, async (req, res) => {
+  res.render('pages/profile', {
+    title:   'My Profile',
+    success: null,
+    error:   null,
+  });
+});
+
+// POST /profile/password — change password
+app.post('/profile/password', requireAuth, async (req, res) => {
+  const { currentPassword, newPassword, confirmPassword } = req.body || {};
+  // Validation
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return res.status(400).render('pages/profile', {
+      title:   'My Profile',
+      success: null,
+      error:   'All fields are required.',
+    });
+  }
+  if (newPassword.length < 6) {
+    return res.status(400).render('pages/profile', {
+      title:   'My Profile',
+      success: null,
+      error:   'New password must be at least 6 characters.',
+    });
+  }
+  if (newPassword !== confirmPassword) {
+    return res.status(400).render('pages/profile', {
+      title:   'My Profile',
+      success: null,
+      error:   'New password and confirmation do not match.',
+    });
+  }
+  try {
+    // Look up user and verify current password
+    const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
+    if (!user) {
+      return res.status(400).render('pages/profile', {
+        title:   'My Profile',
+        success: null,
+        error:   'User not found.',
+      });
+    }
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      return res.status(400).render('pages/profile', {
+        title:   'My Profile',
+        success: null,
+        error:   'Current password is incorrect.',
+      });
+    }
+    if (currentPassword === newPassword) {
+      return res.status(400).render('pages/profile', {
+        title:   'My Profile',
+        success: null,
+        error:   'New password must be different from current password.',
+      });
+    }
+    // Hash new password, update, and regenerate session for security
+    const hash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
+    req.session.regenerate(() => {
+      req.session.userId   = user.id;
+      req.session.tenantId = user.tenantId;
+      req.session.tenantSlug = req.session.tenantSlug;
+      req.session.userName = user.fullName;
+      req.session.userRole = req.session.userRole;
+      res.render('pages/profile', {
+        title:   'My Profile',
+        success: 'Password changed successfully.',
+        error:   null,
+      });
+    });
+  } catch (err) {
+    console.error('Password change error:', err);
+    res.status(500).render('pages/profile', {
+      title:   'My Profile',
+      success: null,
+      error:   'An error occurred. Please try again.',
+    });
+  }
 });
 
 // Root — all authenticated users can see the dashboard

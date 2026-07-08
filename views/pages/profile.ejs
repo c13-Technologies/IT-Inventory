@@ -1,0 +1,98 @@
+<%- include('../partials/head', { title: 'My Profile' }) %>
+
+<body>
+    <%- include('../partials/topbar') %>
+    <div class="vertical-overlay"></div>
+    <%- include('../partials/sidebar') %>
+    <div class="main-content">
+        <div class="page-content">
+            <%- include('../partials/breadcrumb', { title: 'My Profile' }) %>
+            
+            <div class="row">
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <div class="avatar-lg mx-auto mb-3">
+                                <span class="avatar-title rounded-circle bg-primary-subtle text-primary font-size-24">
+                                    <%= (typeof currentUser !== 'undefined' && currentUser && currentUser.fullName || 'U').charAt(0).toUpperCase() %>
+                                </span>
+                            </div>
+                            <h5 class="mb-1"><%= typeof currentUser !== 'undefined' && currentUser ? currentUser.fullName : '' %></h5>
+                            <p class="text-muted mb-2"><%= typeof currentUser !== 'undefined' && currentUser ? (currentUser.role || '').replace(/_/g, ' ') : '' %></p>
+                            <div class="text-start mt-4">
+                                <div class="d-flex justify-content-between border-bottom py-2">
+                                    <span class="text-muted">Full Name</span>
+                                    <span class="fw-medium"><%= typeof currentUser !== 'undefined' && currentUser ? currentUser.fullName : '' %></span>
+                                </div>
+                                <div class="d-flex justify-content-between border-bottom py-2">
+                                    <span class="text-muted">Role</span>
+                                    <span class="badge bg-primary"><%= typeof currentUser !== 'undefined' && currentUser ? (currentUser.role || '').replace(/_/g, ' ') : '' %></span>
+                                </div>
+                                <div class="d-flex justify-content-between border-bottom py-2">
+                                    <span class="text-muted">Tenant</span>
+                                    <span class="fw-medium"><%= typeof currentUser !== 'undefined' && currentUser ? currentUser.tenantSlug : '' %></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-body">
+                            <h5 class="card-title mb-4">Change Password</h5>
+
+                            <% if (typeof success !== 'undefined' && success) { %>
+                                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                    <i class="bx bx-check-circle me-1"></i><%= success %>
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            <% } %>
+                            <% if (typeof error !== 'undefined' && error) { %>
+                                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                    <i class="bx bx-error-circle me-1"></i><%= error %>
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            <% } %>
+
+                            <form method="POST" action="/profile/password">
+                                <div class="mb-3">
+                                    <label for="currentPassword" class="form-label">Current Password</label>
+                                    <input type="password" id="currentPassword" name="currentPassword" class="form-control" placeholder="Enter current password" required autofocus>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="newPassword" class="form-label">New Password</label>
+                                    <input type="password" id="newPassword" name="newPassword" class="form-control" placeholder="Enter new password" required minlength="6">
+                                    <div class="form-text">Minimum 6 characters.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="confirmPassword" class="form-label">Confirm New Password</label>
+                                    <input type="password" id="confirmPassword" name="confirmPassword" class="form-control" placeholder="Confirm new password" required minlength="6">
+                                </div>
+                                <div class="mt-4">
+                                    <button type="submit" class="btn btn-primary waves-effect waves-light">
+                                        <i class="bx bx-save me-1"></i>Update Password
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <%- include('../partials/footer') %>
+    </div>
+    <%- include('../partials/rightbar') %>
+    <%- include('../partials/scripts', { pageScripts: [] }) %>
+    <script>
+        // Auto-dismiss alerts after 5 seconds
+        setTimeout(function() {
+            var alerts = document.querySelectorAll('.alert');
+            alerts.forEach(function(alert) { 
+                var bsAlert = new bootstrap.Alert(alert);
+                bsAlert.close(); 
+            });
+        }, 5000);
+    </script>
+</body>
+</html>
