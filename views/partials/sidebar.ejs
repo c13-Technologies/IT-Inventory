@@ -14,6 +14,12 @@
                     </a>
                 </li>
 
+                <% 
+                const p = typeof userPermissions !== 'undefined' ? userPermissions : [];
+                const has = (perm) => p.includes(perm);
+                %>
+
+                <% if (has('assets:read')) { %>
                 <li class="menu-title" data-key="t-inventory-heading">Inventory</li>
 
                 <li>
@@ -23,10 +29,14 @@
                     </a>
                     <ul class="sub-menu" aria-expanded="false">
                         <li><a href="/assets" data-key="t-all-assets">All Assets</a></li>
+                        <% if (has('assets:write')) { %>
                         <li><a href="/assets/new" data-key="t-new-asset">Add Asset</a></li>
+                        <% } %>
                     </ul>
                 </li>
+                <% } %>
 
+                <% if (has('inventory:read')) { %>
                 <li>
                     <a href="/licenses">
                         <i data-feather="key"></i>
@@ -40,7 +50,9 @@
                         <span data-key="t-license-seats">License Seats</span>
                     </a>
                 </li>
+                <% } %>
 
+                <% if (has('lifecycle:read')) { %>
                 <li class="menu-title" data-key="t-lifecycle-heading">Lifecycle</li>
 
                 <li>
@@ -70,7 +82,9 @@
                         <span data-key="t-warranty">Warranty Tracking</span>
                     </a>
                 </li>
+                <% } %>
 
+                <% if (has('directory:read')) { %>
                 <li class="menu-title" data-key="t-directory-heading">Directory</li>
 
                 <li>
@@ -107,7 +121,9 @@
                         <span data-key="t-categories">Categories</span>
                     </a>
                 </li>
+                <% } %>
 
+                <% if (has('admin:read')) { %>
                 <li class="menu-title" data-key="t-admin-heading">Admin</li>
 
                 <li>
@@ -130,7 +146,9 @@
                         <span data-key="t-reports">Reports</span>
                     </a>
                 </li>
+                <% } %>
 
+                <% if (has('communications:read')) { %>
                 <li class="menu-title" data-key="t-communications-heading">Communications</li>
 
                 <li>
@@ -146,6 +164,7 @@
                         <span data-key="t-webhooks">Webhooks</span>
                     </a>
                 </li>
+                <% } %>
 
             </ul>
         </div>

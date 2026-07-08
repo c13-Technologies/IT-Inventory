@@ -7,15 +7,13 @@
 // vendors → locations → categories → assets → assignments → maintenance.
 
 const { PrismaClient } = require('@prisma/client');
-const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 
 const prisma = new PrismaClient();
 
-// Simple password hash for seed users (all share the same password: "password123")
-function hashPassword(pw) {
-  return crypto.createHash('sha256').update(pw).digest('hex');
-}
-const DEFAULT_PASSWORD_HASH = hashPassword('password123');
+// Bcrypt password hash for seed users (all share the same password: "password123")
+const DEFAULT_PASSWORD = 'password123';
+let DEFAULT_PASSWORD_HASH = null; // set in main() after bcrypt is ready
 
 async function cleanSlate() {
   // Delete in reverse-dependency order to respect FK constraints
@@ -35,6 +33,7 @@ async function cleanSlate() {
 }
 
 async function main() {
+  DEFAULT_PASSWORD_HASH = await bcrypt.hash(DEFAULT_PASSWORD, 12);
   await cleanSlate();
   console.log('Seeding database…\n');
 

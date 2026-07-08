@@ -15,18 +15,32 @@ const prisma = new PrismaClient();
 const schemas = require('./schemas');
 
 // ---------------------------------------------------------------------------
-// Tenant resolution — hardcoded to the seed tenant until auth is wired up.
+// Tenant resolution — from Express session (set at login). Falls back to
+// hardcoded seed tenant for dev convenience when session is not available.
 // ---------------------------------------------------------------------------
 const TENANT_SLUG = 'c13-tech';
-let _tenantId = null;
+let _fallbackTid = null;
+let _currentReq = null;
 
-async function tenantId() {
-  if (!_tenantId) {
+async function _fallbackTenantId() {
+  if (!_fallbackTid) {
     const t = await prisma.tenant.findUnique({ where: { slug: TENANT_SLUG } });
     if (!t) throw new Error('Tenant not found. Run `npm run db:seed` first.');
-    _tenantId = t.id;
+    _fallbackTid = t.id;
   }
-  return _tenantId;
+  return _fallbackTid;
+}
+
+// Set the current request context so tenantId() can read the session
+function setRequest(req) { _currentReq = req; }
+
+async function tenantId() {
+  // Use session tenantId if available
+  if (_currentReq && _currentReq.session && _currentReq.session.tenantId) {
+    return _currentReq.session.tenantId;
+  }
+  // Fallback to seed tenant
+  return _fallbackTenantId();
 }
 
 // ---------------------------------------------------------------------------
@@ -487,6 +501,8 @@ function getReports() {
 // Module exports — mirrors mockData.js exactly
 // ---------------------------------------------------------------------------
 module.exports = Object.assign({
+  // Tenant / request context
+  setRequest,
   // Assets (query)
   getAssets,
   getAssetsFlat,

@@ -13,11 +13,27 @@
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
+const session = require('express-session');
+const bcrypt = require('bcrypt');
+const { PrismaClient } = require('@prisma/client');
 
 const app = express();
+const prisma = new PrismaClient();
 
 // Body parsing for CRUD POSTs (form submissions).
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Session middleware — memory store (dev only; swap to Redis/DB for production)
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'inventory-dev-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: false, // set true behind HTTPS
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+  },
+}));
 
 // Don't advertise the runtime in responses.
 app.disable('x-powered-by');
@@ -62,8 +78,166 @@ app.use((req, _res, next) => {
 // root HTML files.
 // ----------------------------------------------------------------------
 
-// Root
-app.get('/', (_req, res) => {
+// ----------------------------------------------------------------------
+// Authentication routes — login, logout
+// ----------------------------------------------------------------------
+
+// GET /login — show login form
+app.get('/login', (req, res) => {
+  if (req.session.userId) return res.redirect('/');
+  res.render('pages/auth-login', { title: 'Login', error: null, message: null });
+});
+
+// POST /login — authenticate user
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).render('pages/auth-login', { title: 'Login', error: 'Email and password are required.', message: null });
+  }
+  try {
+    // Find user by email across all tenants (email is unique per tenant via
+    // tenantId_email compound key, so findFirst across tenants works at login).
+    const user = await prisma.user.findFirst({
+      where: { email },
+      include: { tenant: true, role: true },
+    });
+    if (!user) {
+      return res.status(401).render('pages/auth-login', { title: 'Login', error: 'Invalid email or password.', message: null });
+    }
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      return res.status(401).render('pages/auth-login', { title: 'Login', error: 'Invalid email or password.', message: null });
+    }
+    // Regenerate session to prevent session fixation
+    const redirectTo = req.session.returnTo || '/';
+    req.session.regenerate(() => {
+      req.session.userId   = user.id;
+      req.session.tenantId = user.tenantId;
+      req.session.tenantSlug = user.tenant ? user.tenant.slug : null;
+      req.session.userName = user.fullName;
+      req.session.userRole = user.role ? user.role.name.toUpperCase().replace(/ /g, '_') : null;
+      res.redirect(redirectTo);
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).render('pages/auth-login', { title: 'Login', error: 'An error occurred. Please try again.', message: null });
+  }
+});
+
+// GET /logout — destroy session and redirect to login
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/login');
+  });
+});
+
+// Auth guard middleware — redirects to /login if not authenticated.
+// Saves the intended URL so the login handler can redirect back after success.
+function requireAuth(req, res, next) {
+  if (req.session && req.session.userId) return next();
+  req.session.returnTo = req.originalUrl;
+  res.redirect('/login');
+}
+
+// ----------------------------------------------------------------------
+// Role-based access control (RBAC)
+// ----------------------------------------------------------------------
+
+// Permission list:
+//   assets:read / assets:write
+//   lifecycle:read / lifecycle:write
+//   directory:read / directory:write
+//   inventory:read / inventory:write
+//   admin:read / admin:write
+//   communications:read / communications:write
+const PERMISSIONS = {
+  IT_MANAGER: [
+    'assets:read', 'assets:write',
+    'lifecycle:read', 'lifecycle:write',
+    'directory:read', 'directory:write',
+    'inventory:read', 'inventory:write',
+    'admin:read', 'admin:write',
+    'communications:read', 'communications:write',
+  ],
+  IT_SUPPORT: [
+    'assets:read', 'assets:write',
+    'lifecycle:read', 'lifecycle:write',
+    'directory:read',
+    'inventory:read',
+    'admin:read',
+    'communications:read',
+  ],
+  DEPARTMENT_HEAD: [
+    'assets:read',
+    'lifecycle:read',
+    'directory:read',
+  ],
+  EMPLOYEE: [
+    'assets:read',
+    'lifecycle:read',
+  ],
+};
+
+// Middleware factory — returns a middleware that checks the given permission.
+// Must be placed after requireAuth (which ensures req.session.userRole exists).
+function can(permission) {
+  return (req, res, next) => {
+    const role = req.session.userRole;
+    const allowed = PERMISSIONS[role] || [];
+    if (!allowed.includes(permission)) {
+      return res.status(403).render('pages/pages-404', {
+        title: 'Access Denied',
+        errorMessage: 'You do not have permission to access this page.',
+      });
+    }
+    next();
+  };
+}
+
+// Permission look-up for the wildcard .html route — maps page name to required
+// permission so the bypass route can't skirt RBAC.
+const PAGE_PERMISSIONS = {
+  index:           null,            // dashboard — auth-only
+  assets:         'assets:read',
+  vendors:        'directory:read',
+  locations:      'directory:read',
+  categories:     'directory:read',
+  users:          'directory:read',
+  assignments:    'lifecycle:read',
+  maintenance:    'lifecycle:read',
+  licenses:       'inventory:read',
+  departments:    'directory:read',
+  approvals:      'lifecycle:read',
+  'license-seats': 'inventory:read',
+  warranty:       'lifecycle:read',
+  roles:          'admin:read',
+  'audit-log':    'admin:read',
+  reports:        'admin:read',
+  notifications:  'communications:read',
+  webhooks:       'communications:read',
+};
+
+// Layout locals for all rendered pages — inject user info + permissions
+app.use((req, res, next) => {
+  const role = req.session.userRole;
+  res.locals.currentUser = req.session.userId ? {
+    id: req.session.userId,
+    fullName: req.session.userName,
+    role: role,
+    tenantSlug: req.session.tenantSlug,
+  } : null;
+  res.locals.userPermissions = role ? (PERMISSIONS[role] || []) : [];
+  next();
+});
+
+// Set request context for prismaData.js tenant resolution
+app.use((req, _res, next) => {
+  prismaData.setRequest(req);
+  next();
+});
+
+// Root — all authenticated users can see the dashboard
+app.get('/', requireAuth, (_req, res) => {
   res.render('pages/index', { title: TITLES['index'] || 'Dashboard' });
 });
 
@@ -76,12 +250,34 @@ app.get('/pages-500.html', (_req, res) => {
 });
 
 // All other *.html URLs → render the matching EJS view.
+// Only unauthenticated pages that are safe to serve without auth:
+// auth-*, pages-4*, pages-5*
+const PUBLIC_PAGES = /^(auth|pages-4|pages-5)/;
 app.get('/:page.html', (req, res, next) => {
   const page = req.params.page;
   // Defensive: only allow simple, single-segment page names. This blocks any
   // attempt to escape views/pages/ (e.g. via ".." or path tricks) and ensures
   // we only ever render files we actually generated from the Minia template.
   if (!/^[a-zA-Z0-9_-]+$/.test(page)) return next();
+  // Require auth for all non-public pages (blocks /assets.html, /vendors.html, etc.)
+  if (!PUBLIC_PAGES.test(page) && (!req.session || !req.session.userId)) {
+    req.session.returnTo = req.originalUrl;
+    return res.redirect('/login');
+  }
+  // Check RBAC for non-public pages that match a known permission
+  if (!PUBLIC_PAGES.test(page) && PAGE_PERMISSIONS.hasOwnProperty(page)) {
+    const required = PAGE_PERMISSIONS[page];
+    if (required) {
+      const role = req.session.userRole;
+      const allowed = PERMISSIONS[role] || [];
+      if (!allowed.includes(required)) {
+        return res.status(403).render('pages/pages-404', {
+          title: 'Access Denied',
+          errorMessage: 'You do not have permission to access this page.',
+        });
+      }
+    }
+  }
   const viewPath = path.join(__dirname, 'views', 'pages', page + '.ejs');
   if (fs.existsSync(viewPath)) {
     res.render('pages/' + page, { title: TITLES[page] || page });
@@ -98,7 +294,7 @@ app.get('/:page.html', (req, res, next) => {
 // ----------------------------------------------------------------------
 const prismaData = require('./views/lib/prismaData');
 
-app.get('/assets', async (req, res) => {
+app.get('/assets', requireAuth, can('assets:read'), async (req, res) => {
   const result = await prismaData.getAssets({
     status:       req.query.status       || undefined,
     categoryId:   req.query.categoryId   || undefined,
@@ -119,7 +315,7 @@ app.get('/assets', async (req, res) => {
   });
 });
 
-app.get('/assets/new', async (_req, res) => {
+app.get('/assets/new', requireAuth, can('assets:write'), async (_req, res) => {
   res.render('pages/assets/new', {
     title:      TITLES['assets/new'] || 'New Asset',
     categories: await prismaData.getCategories(),
@@ -128,7 +324,7 @@ app.get('/assets/new', async (_req, res) => {
   });
 });
 
-app.get('/assets/:id', async (req, res, next) => {
+app.get('/assets/:id', requireAuth, can('assets:read'), async (req, res, next) => {
   const asset = await prismaData.getAssetById(req.params.id);
   if (!asset) return next();
   res.render('pages/assets/detail', {
@@ -140,7 +336,7 @@ app.get('/assets/:id', async (req, res, next) => {
   });
 });
 
-app.get('/assets/:id/edit', async (req, res, next) => {
+app.get('/assets/:id/edit', requireAuth, can('assets:write'), async (req, res, next) => {
   const asset = await prismaData.getAssetById(req.params.id);
   if (!asset) return next();
   res.render('pages/assets/edit', {
@@ -152,7 +348,7 @@ app.get('/assets/:id/edit', async (req, res, next) => {
   });
 });
 
-app.get('/assets/:id/qr', async (req, res, next) => {
+app.get('/assets/:id/qr', requireAuth, can('assets:read'), async (req, res, next) => {
   const asset = await prismaData.getAssetById(req.params.id);
   if (!asset) return next();
   res.render('pages/assets/qr', {
@@ -170,7 +366,7 @@ app.get('/assets/:id/qr', async (req, res, next) => {
 // ----------------------------------------------------------------------
 
 // Directory — model-driven, mockData-backed
-app.get('/vendors', async (req, res) => {
+app.get('/vendors', requireAuth, can('directory:read'), async (req, res) => {
   let rows = await prismaData.getVendors();
   const search = req.query.search || '';
   const status = req.query.status || '';
@@ -196,7 +392,7 @@ app.get('/vendors', async (req, res) => {
   });
 });
 
-app.get('/locations', async (req, res) => {
+app.get('/locations', requireAuth, can('directory:read'), async (req, res) => {
   let rows = await prismaData.getLocations();
   const search = req.query.search || '';
   if (search) {
@@ -213,7 +409,7 @@ app.get('/locations', async (req, res) => {
   });
 });
 
-app.get('/categories', async (req, res) => {
+app.get('/categories', requireAuth, can('directory:read'), async (req, res) => {
   let rows = await prismaData.getCategories();
   const search = req.query.search || '';
   const type   = req.query.status || '';
@@ -233,7 +429,7 @@ app.get('/categories', async (req, res) => {
   });
 });
 
-app.get('/users', async (req, res) => {
+app.get('/users', requireAuth, can('directory:read'), async (req, res) => {
   let rows = await prismaData.getUsers();
   const search = req.query.search || '';
   const role   = req.query.status || '';
@@ -254,7 +450,7 @@ app.get('/users', async (req, res) => {
 });
 
 // Lifecycle — flat assignments + maintenance listings (added as global accessors to mockData)
-app.get('/assignments', async (req, res) => {
+app.get('/assignments', requireAuth, can('lifecycle:read'), async (req, res) => {
   let rows = await prismaData.getAssignments();
   const search = req.query.search || '';
   if (search) {
@@ -274,7 +470,7 @@ app.get('/assignments', async (req, res) => {
   });
 });
 
-app.get('/maintenance', async (req, res) => {
+app.get('/maintenance', requireAuth, can('lifecycle:read'), async (req, res) => {
   let rows = await prismaData.getMaintenance();
   const search = req.query.search || '';
   const status = req.query.status || '';
@@ -299,7 +495,7 @@ app.get('/maintenance', async (req, res) => {
 
 // Inventory/Lifecycle stubs — Phase 6 (Prisma) wiring only; views render empty-state
 // Pass an empty array so the toolbar + table-or-empty-state pattern works.
-app.get('/licenses', async (req, res) => {
+app.get('/licenses', requireAuth, can('inventory:read'), async (req, res) => {
   let rows = typeof prismaData.listLicenses === 'function' ? await prismaData.listLicenses() : [];
   const search = req.query.search || '';
   if (search) {
@@ -314,7 +510,7 @@ app.get('/licenses', async (req, res) => {
     schema:   schemas['licenses'] || [],
   });
 });
-app.get('/departments', async (req, res) => {
+app.get('/departments', requireAuth, can('directory:read'), async (req, res) => {
   let rows = typeof prismaData.listDepartments === 'function' ? await prismaData.listDepartments() : [];
   const search = req.query.search || '';
   if (search) {
@@ -330,7 +526,7 @@ app.get('/departments', async (req, res) => {
     sources:     getSources('departments'),
   });
 });
-app.get('/approvals', async (req, res) => {
+app.get('/approvals', requireAuth, can('lifecycle:read'), async (req, res) => {
   let rows = typeof prismaData.listApprovals === 'function' ? await prismaData.listApprovals() : [];
   const search = req.query.search || '';
   const status = req.query.status || '';
@@ -355,7 +551,7 @@ app.get('/approvals', async (req, res) => {
 // All render empty-state stubs wired for Phase 6 Prisma swap.
 // ----------------------------------------------------------------------
 
-app.get('/license-seats', async (req, res) => {
+app.get('/license-seats', requireAuth, can('inventory:read'), async (req, res) => {
   let rows = await prismaData.getLicenseSeats();
   const search = req.query.search || '';
   if (search) {
@@ -375,7 +571,7 @@ app.get('/license-seats', async (req, res) => {
   });
 });
 
-app.get('/warranty', async (req, res) => {
+app.get('/warranty', requireAuth, can('lifecycle:read'), async (req, res) => {
   let rows = await prismaData.getWarranties();
   const search = req.query.search || '';
   const status = req.query.status || '';
@@ -397,7 +593,7 @@ app.get('/warranty', async (req, res) => {
   });
 });
 
-app.get('/roles', async (req, res) => {
+app.get('/roles', requireAuth, can('admin:read'), async (req, res) => {
   let rows = await prismaData.getRoles();
   const search = req.query.search || '';
   if (search) {
@@ -416,7 +612,7 @@ app.get('/roles', async (req, res) => {
   });
 });
 
-app.get('/audit-log', async (req, res) => {
+app.get('/audit-log', requireAuth, can('admin:read'), async (req, res) => {
   let rows = await prismaData.getAuditLogs();
   const search = req.query.search || '';
   if (search) {
@@ -437,7 +633,7 @@ app.get('/audit-log', async (req, res) => {
   });
 });
 
-app.get('/reports', async (req, res) => {
+app.get('/reports', requireAuth, can('admin:read'), async (req, res) => {
   let rows = prismaData.getReports();
   const search = req.query.search || '';
   if (search) {
@@ -453,7 +649,7 @@ app.get('/reports', async (req, res) => {
   });
 });
 
-app.get('/notifications', async (req, res) => {
+app.get('/notifications', requireAuth, can('communications:read'), async (req, res) => {
   let rows = await prismaData.getNotifications();
   const search = req.query.search || '';
   const status = req.query.status || '';
@@ -476,7 +672,7 @@ app.get('/notifications', async (req, res) => {
   });
 });
 
-app.get('/webhooks', async (req, res) => {
+app.get('/webhooks', requireAuth, can('communications:read'), async (req, res) => {
   let rows = await prismaData.getWebhooks();
   const search = req.query.search || '';
   const channel = req.query.status || '';
@@ -522,6 +718,19 @@ const CRUD_SLUG_TO_NAME = {
   licenses:    'License',
   departments: 'Department',
   approvals:   'Approval',
+};
+
+// Permission prefix per slug for the CRUD loop
+const CRUD_PERM_PREFIX = {
+  vendors:     'directory',
+  locations:   'directory',
+  categories:  'directory',
+  users:       'directory',
+  departments: 'directory',
+  assignments: 'lifecycle',
+  maintenance: 'lifecycle',
+  approvals:   'lifecycle',
+  licenses:    'inventory',
 };
 
 // Parent sidebar section per slug — used for the breadcrumb on new/edit/detail views.
@@ -623,11 +832,12 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   const capLc   = Cap[0].toLowerCase() + Cap.slice(1);
   const schema  = (schemas[slug]) || [];
   const hasCrud = typeof prismaData['create' + Cap] === 'function';
+  const perm    = CRUD_PERM_PREFIX[slug] || 'assets'; // read/write permission prefix
 
   if (!hasCrud) continue;
 
   // GET /<slug>/:id  (detail)
-  app.get('/' + slug + '/:id', async function(req, res, next) {
+  app.get('/' + slug + '/:id', requireAuth, can(perm + ':read'), async function(req, res, next) {
     const row = await prismaData['get' + Cap + 'ById'](req.params.id);
     if (!row) return next();
     res.render('pages/' + slug + '/detail', {
@@ -640,7 +850,7 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // GET /<slug>/new
-  app.get('/' + slug + '/new', async function(req, res) {
+  app.get('/' + slug + '/new', requireAuth, can(perm + ':write'), async function(req, res) {
     res.render('pages/' + slug + '/new', {
       title:   'New ' + Cap,
       slug, schema,
@@ -653,7 +863,7 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // POST /<slug>  (create)
-  app.post('/' + slug, async function(req, res) {
+  app.post('/' + slug, requireAuth, can(perm + ':write'), async function(req, res) {
     const result = await prismaData['create' + Cap](req.body || {});
     if (!result.success) {
       if (req.body._modal) {
@@ -679,7 +889,7 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // GET /<slug>/:id/edit
-  app.get('/' + slug + '/:id/edit', async function(req, res, next) {
+  app.get('/' + slug + '/:id/edit', requireAuth, can(perm + ':write'), async function(req, res, next) {
     const row = await prismaData['get' + Cap + 'ById'](req.params.id);
     if (!row) return next();
     res.render('pages/' + slug + '/edit', {
@@ -693,7 +903,7 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // POST /<slug>/:id  (update)
-  app.post('/' + slug + '/:id', async function(req, res, next) {
+  app.post('/' + slug + '/:id', requireAuth, can(perm + ':write'), async function(req, res, next) {
     const existing = await prismaData['get' + Cap + 'ById'](req.params.id);
     if (!existing) return next();
     const result = await prismaData['update' + Cap](req.params.id, req.body || {});
@@ -722,7 +932,7 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // POST /<slug>/:id/delete
-  app.post('/' + slug + '/:id/delete', async function(req, res) {
+  app.post('/' + slug + '/:id/delete', requireAuth, can(perm + ':write'), async function(req, res) {
     const result = await prismaData['delete' + Cap](req.params.id);
     if (result.success) return res.redirect('/' + slug);
     // delete failed — re-render the detail page with the FK blocker surfaced

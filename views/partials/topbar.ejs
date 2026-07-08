@@ -242,15 +242,25 @@
                         <button type="button" class="btn header-item bg-light-subtle border-start border-end" id="page-header-user-dropdown" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                                 <img class="rounded-circle header-profile-user" src="assets/images/users/avatar-2.png"
                                     alt="Header Avatar">
-                                <span class="d-none d-xl-inline-block ms-1 fw-medium">Byte Alexander</span>
+                                <span class="d-none d-xl-inline-block ms-1 fw-medium">
+                                    <% if (typeof currentUser !== 'undefined' && currentUser) { %>
+                                        <%= currentUser.fullName %>
+                                    <% } else { %>
+                                        Guest
+                                    <% } %>
+                                </span>
                                 <i class="mdi mdi-chevron-down d-none d-xl-inline-block"></i>
                             </button>
                         <div class="dropdown-menu dropdown-menu-end">
-                            <!-- item-->
-                            <a class="dropdown-item" href="apps-contacts-profile.html"><i class="mdi mdi mdi-face-man font-size-16 align-middle me-1"></i> Profile</a>
-                            <a class="dropdown-item" href="auth-lock-screen.html"><i class="mdi mdi-lock font-size-16 align-middle me-1"></i> Lock Screen</a>
+                            <% if (typeof currentUser !== 'undefined' && currentUser) { %>
+                            <span class="dropdown-item-text text-muted small">
+                                <i class="mdi mdi-shield-account font-size-16 align-middle me-1"></i>
+                                <%= currentUser.fullName %><br>
+                                <span class="ms-4"><%= (currentUser.role || '').replace(/_/g, ' ') %></span>
+                            </span>
                             <div class="dropdown-divider"></div>
-                            <a class="dropdown-item" href="auth-logout.html"><i class="mdi mdi-logout font-size-16 align-middle me-1"></i> Logout</a>
+                            <% } %>
+                            <a class="dropdown-item" href="/logout"><i class="mdi mdi-logout font-size-16 align-middle me-1"></i> Sign Out</a>
                         </div>
                     </div>
 
