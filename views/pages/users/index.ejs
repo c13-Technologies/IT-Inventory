@@ -47,6 +47,7 @@
                             <th>Role</th>
                             <th>Department</th>
                             <th>Status</th>
+                            <th>Last Login</th>
                             <th class="text-end">Actions</th>
                           </tr>
                         </thead>
@@ -58,6 +59,7 @@
                               <td><span class="badge bg-<%= roleColor(u.role) %>"><%= (u.role || '').replace(/_/g, ' ') %></span></td>
                               <td><%- u.departmentId ? '<code class="text-muted">' + u.departmentId + '</code>' : '—' %></td>
                               <td><span class="badge bg-<%= u.status === 'ACTIVE' ? 'success' : u.status === 'PENDING' ? 'warning' : 'secondary' %>"><%= u.status || 'ACTIVE' %></span></td>
+                              <td class="text-muted small"><%= u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—' %></td>
                               <td class="text-end"><%- include('../../partials/row-actions', { slug: 'users', id: u.id, capLc: 'user', modalMode: true }) %></td>
                             </tr>
                           <% }); %>
