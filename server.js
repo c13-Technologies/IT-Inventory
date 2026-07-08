@@ -38,6 +38,10 @@ const HOST = process.env.HOST || '127.0.0.1';
 const MAX_PORT_ATTEMPTS = 10;
 const ROOT_DIR = __dirname;
 
+// Async error wrapper for Express 4.x — catches rejected promises in async
+// route handlers and forwards them to the Express error handler.
+const asyncHandler = fn => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 // Disable HTTP caching in dev so every refresh picks up the latest HTML/CSS/JS.
 app.use((req, res, next) => {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -92,10 +96,10 @@ app.get('/:page.html', (req, res, next) => {
 // can swap from `mockData.getAssets(...)` to `prisma.asset.findMany(...)`
 // with no EJS changes.
 // ----------------------------------------------------------------------
-const mockData = require('./views/lib/mockData');
+const prismaData = require('./views/lib/prismaData');
 
-app.get('/assets', (req, res) => {
-  const result = mockData.getAssets({
+app.get('/assets', async (req, res) => {
+  const result = await prismaData.getAssets({
     status:       req.query.status       || undefined,
     categoryId:   req.query.categoryId   || undefined,
     locationId:   req.query.locationId   || undefined,
@@ -108,48 +112,48 @@ app.get('/assets', (req, res) => {
     title:      TITLES['assets'] || 'Assets',
     query:      req.query,
     result:     result,
-    assetsAll:  mockData.getAssets(),
-    categories: mockData.getCategories(),
-    locations:  mockData.getLocations(),
-    vendors:    mockData.getVendors(),
+    assetsAll:  await prismaData.getAssets(),
+    categories: await prismaData.getCategories(),
+    locations:  await prismaData.getLocations(),
+    vendors:    await prismaData.getVendors(),
   });
 });
 
-app.get('/assets/new', (_req, res) => {
+app.get('/assets/new', async (_req, res) => {
   res.render('pages/assets/new', {
     title:      TITLES['assets/new'] || 'New Asset',
-    categories: mockData.getCategories(),
-    vendors:    mockData.getVendors(),
-    locations:  mockData.getLocations(),
+    categories: await prismaData.getCategories(),
+    vendors:    await prismaData.getVendors(),
+    locations:  await prismaData.getLocations(),
   });
 });
 
-app.get('/assets/:id', (req, res, next) => {
-  const asset = mockData.getAssetById(req.params.id);
+app.get('/assets/:id', async (req, res, next) => {
+  const asset = await prismaData.getAssetById(req.params.id);
   if (!asset) return next();
   res.render('pages/assets/detail', {
     title:       asset.name,
     asset:       asset,
-    assignments: mockData.getAssignmentsForAsset(asset.id),
-    maintenance: mockData.getMaintenanceForAsset(asset.id),
-    users:       mockData.getUsers(),
+    assignments: await prismaData.getAssignmentsForAsset(asset.id),
+    maintenance: await prismaData.getMaintenanceForAsset(asset.id),
+    users:       await prismaData.getUsers(),
   });
 });
 
-app.get('/assets/:id/edit', (req, res, next) => {
-  const asset = mockData.getAssetById(req.params.id);
+app.get('/assets/:id/edit', async (req, res, next) => {
+  const asset = await prismaData.getAssetById(req.params.id);
   if (!asset) return next();
   res.render('pages/assets/edit', {
     title:      'Edit ' + asset.name,
     asset:      asset,
-    categories: mockData.getCategories(),
-    vendors:    mockData.getVendors(),
-    locations:  mockData.getLocations(),
+    categories: await prismaData.getCategories(),
+    vendors:    await prismaData.getVendors(),
+    locations:  await prismaData.getLocations(),
   });
 });
 
-app.get('/assets/:id/qr', (req, res, next) => {
-  const asset = mockData.getAssetById(req.params.id);
+app.get('/assets/:id/qr', async (req, res, next) => {
+  const asset = await prismaData.getAssetById(req.params.id);
   if (!asset) return next();
   res.render('pages/assets/qr', {
     title: 'Print QR - ' + asset.name,
@@ -166,8 +170,8 @@ app.get('/assets/:id/qr', (req, res, next) => {
 // ----------------------------------------------------------------------
 
 // Directory — model-driven, mockData-backed
-app.get('/vendors', (req, res) => {
-  let rows = mockData.getVendors();
+app.get('/vendors', async (req, res) => {
+  let rows = await prismaData.getVendors();
   const search = req.query.search || '';
   const status = req.query.status || '';
   if (search) {
@@ -192,8 +196,8 @@ app.get('/vendors', (req, res) => {
   });
 });
 
-app.get('/locations', (req, res) => {
-  let rows = mockData.getLocations();
+app.get('/locations', async (req, res) => {
+  let rows = await prismaData.getLocations();
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -209,8 +213,8 @@ app.get('/locations', (req, res) => {
   });
 });
 
-app.get('/categories', (req, res) => {
-  let rows = mockData.getCategories();
+app.get('/categories', async (req, res) => {
+  let rows = await prismaData.getCategories();
   const search = req.query.search || '';
   const type   = req.query.status || '';
   if (search) {
@@ -229,8 +233,8 @@ app.get('/categories', (req, res) => {
   });
 });
 
-app.get('/users', (req, res) => {
-  let rows = mockData.getUsers();
+app.get('/users', async (req, res) => {
+  let rows = await prismaData.getUsers();
   const search = req.query.search || '';
   const role   = req.query.status || '';
   if (search) {
@@ -250,8 +254,8 @@ app.get('/users', (req, res) => {
 });
 
 // Lifecycle — flat assignments + maintenance listings (added as global accessors to mockData)
-app.get('/assignments', (req, res) => {
-  let rows = mockData.getAssignments();
+app.get('/assignments', async (req, res) => {
+  let rows = await prismaData.getAssignments();
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -270,8 +274,8 @@ app.get('/assignments', (req, res) => {
   });
 });
 
-app.get('/maintenance', (req, res) => {
-  let rows = mockData.getMaintenance();
+app.get('/maintenance', async (req, res) => {
+  let rows = await prismaData.getMaintenance();
   const search = req.query.search || '';
   const status = req.query.status || '';
   if (search) {
@@ -295,8 +299,8 @@ app.get('/maintenance', (req, res) => {
 
 // Inventory/Lifecycle stubs — Phase 6 (Prisma) wiring only; views render empty-state
 // Pass an empty array so the toolbar + table-or-empty-state pattern works.
-app.get('/licenses', (req, res) => {
-  let rows = typeof mockData.listLicenses === 'function' ? mockData.listLicenses() : [];
+app.get('/licenses', async (req, res) => {
+  let rows = typeof prismaData.listLicenses === 'function' ? await prismaData.listLicenses() : [];
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -310,8 +314,8 @@ app.get('/licenses', (req, res) => {
     schema:   schemas['licenses'] || [],
   });
 });
-app.get('/departments', (req, res) => {
-  let rows = typeof mockData.listDepartments === 'function' ? mockData.listDepartments() : [];
+app.get('/departments', async (req, res) => {
+  let rows = typeof prismaData.listDepartments === 'function' ? await prismaData.listDepartments() : [];
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -326,8 +330,8 @@ app.get('/departments', (req, res) => {
     sources:     getSources('departments'),
   });
 });
-app.get('/approvals', (req, res) => {
-  let rows = typeof mockData.listApprovals === 'function' ? mockData.listApprovals() : [];
+app.get('/approvals', async (req, res) => {
+  let rows = typeof prismaData.listApprovals === 'function' ? await prismaData.listApprovals() : [];
   const search = req.query.search || '';
   const status = req.query.status || '';
   if (search) {
@@ -351,8 +355,8 @@ app.get('/approvals', (req, res) => {
 // All render empty-state stubs wired for Phase 6 Prisma swap.
 // ----------------------------------------------------------------------
 
-app.get('/license-seats', (req, res) => {
-  let rows = typeof mockData.listLicenseSeats === 'function' ? mockData.listLicenseSeats() : [];
+app.get('/license-seats', async (req, res) => {
+  let rows = typeof prismaData.listLicenseSeats === 'function' ? await prismaData.listLicenseSeats() : [];
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -371,8 +375,8 @@ app.get('/license-seats', (req, res) => {
   });
 });
 
-app.get('/warranty', (req, res) => {
-  let rows = typeof mockData.listWarranties === 'function' ? mockData.listWarranties() : [];
+app.get('/warranty', async (req, res) => {
+  let rows = typeof prismaData.listWarranties === 'function' ? await prismaData.listWarranties() : [];
   const search = req.query.search || '';
   const status = req.query.status || '';
   if (search) {
@@ -393,8 +397,8 @@ app.get('/warranty', (req, res) => {
   });
 });
 
-app.get('/roles', (req, res) => {
-  let rows = typeof mockData.listRoles === 'function' ? mockData.listRoles() : [];
+app.get('/roles', async (req, res) => {
+  let rows = typeof prismaData.listRoles === 'function' ? await prismaData.listRoles() : [];
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -412,8 +416,8 @@ app.get('/roles', (req, res) => {
   });
 });
 
-app.get('/audit-log', (req, res) => {
-  let rows = typeof mockData.listAuditLogs === 'function' ? mockData.listAuditLogs() : [];
+app.get('/audit-log', async (req, res) => {
+  let rows = typeof prismaData.listAuditLogs === 'function' ? await prismaData.listAuditLogs() : [];
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -433,8 +437,8 @@ app.get('/audit-log', (req, res) => {
   });
 });
 
-app.get('/reports', (req, res) => {
-  let rows = typeof mockData.listReports === 'function' ? mockData.listReports() : [];
+app.get('/reports', async (req, res) => {
+  let rows = typeof prismaData.listReports === 'function' ? await prismaData.listReports() : [];
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -449,8 +453,8 @@ app.get('/reports', (req, res) => {
   });
 });
 
-app.get('/notifications', (req, res) => {
-  let rows = typeof mockData.listNotifications === 'function' ? mockData.listNotifications() : [];
+app.get('/notifications', async (req, res) => {
+  let rows = typeof prismaData.listNotifications === 'function' ? await prismaData.listNotifications() : [];
   const search = req.query.search || '';
   const status = req.query.status || '';
   if (search) {
@@ -472,8 +476,8 @@ app.get('/notifications', (req, res) => {
   });
 });
 
-app.get('/webhooks', (req, res) => {
-  let rows = typeof mockData.listWebhooks === 'function' ? mockData.listWebhooks() : [];
+app.get('/webhooks', async (req, res) => {
+  let rows = typeof prismaData.listWebhooks === 'function' ? await prismaData.listWebhooks() : [];
   const search = req.query.search || '';
   const channel = req.query.status || '';
   if (search) {
@@ -534,26 +538,34 @@ const CRUD_PARENT = {
 };
 
 // Source rows for select-fk fields. Resolved once per request.
-function getSources(_slug) {
+async function getSources(_slug) {
+  const [categories, locations, vendors, users, assets, departments] = await Promise.all([
+    prismaData.getCategories(),
+    prismaData.getLocations(),
+    prismaData.getVendors(),
+    prismaData.getUsers(),
+    prismaData.getAssetsFlat(),
+    typeof prismaData.listDepartments === 'function' ? prismaData.listDepartments() : Promise.resolve([]),
+  ]);
   return {
-    categories:  mockData.getCategories(),
-    locations:   mockData.getLocations(),
-    vendors:     mockData.getVendors(),
-    users:       mockData.getUsers(),
-    assets:      mockData.getAssets().rows.map(a => ({ id: a.id, name: a.assetTag + ' — ' + a.name, assetTag: a.assetTag })),
-    departments: typeof mockData.listDepartments === 'function' ? mockData.listDepartments() : [],
+    categories,
+    locations,
+    vendors,
+    users,
+    assets: assets.map(a => ({ id: a.id, name: a.assetTag + ' — ' + a.name, assetTag: a.assetTag })),
+    departments,
   };
 }
 
 // Build the locals object that a list page needs. Used by the CRUD loop when
 // a modal submit fails validation — instead of rendering the standalone /new
 // or /edit page, we re-render the list page with the modal pre-opened.
-function getListLocals(slug, query) {
-  const sources = getSources(slug);
+async function getListLocals(slug, query) {
+  const sources = await getSources(slug);
   const base = { slug, query, schema: schemas[slug] || [], sources, title: TITLES[slug] || slug };
   switch (slug) {
     case 'vendors': {
-      let rows = mockData.getVendors();
+      let rows = await prismaData.getVendors();
       const s = (query && query.search) || '';
       const st = (query && query.status) || '';
       if (s) { const q = s.toLowerCase(); rows = rows.filter(v => v.name.toLowerCase().includes(q) || (v.contactPerson || '').toLowerCase().includes(q) || (v.email || '').toLowerCase().includes(q)); }
@@ -561,13 +573,13 @@ function getListLocals(slug, query) {
       return Object.assign({}, base, { vendors: rows, statusOptions: ['', 'ACTIVE', 'INACTIVE'] });
     }
     case 'locations': {
-      let rows = mockData.getLocations();
+      let rows = await prismaData.getLocations();
       const s = (query && query.search) || '';
       if (s) { const q = s.toLowerCase(); rows = rows.filter(l => l.name.toLowerCase().includes(q) || (l.address || '').toLowerCase().includes(q)); }
       return Object.assign({}, base, { locations: rows });
     }
     case 'categories': {
-      let rows = mockData.getCategories();
+      let rows = await prismaData.getCategories();
       const s = (query && query.search) || '';
       const t = (query && query.status) || '';
       if (s) { const q = s.toLowerCase(); rows = rows.filter(c => c.name.toLowerCase().includes(q)); }
@@ -575,7 +587,7 @@ function getListLocals(slug, query) {
       return Object.assign({}, base, { categories: rows, statusOptions: ['', 'HARDWARE', 'SOFTWARE', 'PERIPHERAL', 'ACCESSORY'] });
     }
     case 'users': {
-      let rows = mockData.getUsers();
+      let rows = await prismaData.getUsers();
       const s = (query && query.search) || '';
       const r = (query && query.status) || '';
       if (s) { const q = s.toLowerCase(); rows = rows.filter(u => u.fullName.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)); }
@@ -583,19 +595,19 @@ function getListLocals(slug, query) {
       return Object.assign({}, base, { users: rows, statusOptions: ['', 'IT_MANAGER', 'IT_SUPPORT', 'DEPARTMENT_HEAD', 'EMPLOYEE'] });
     }
     case 'assignments': {
-      let rows = mockData.getAssignments();
+      let rows = await prismaData.getAssignments();
       const s = (query && query.search) || '';
       if (s) { const q = s.toLowerCase(); rows = rows.filter(a => (a.assetId || '').toLowerCase().includes(q) || (a.user && a.user.fullName || '').toLowerCase().includes(q)); }
       return Object.assign({}, base, { assignments: rows });
     }
     case 'departments': {
-      let rows = typeof mockData.listDepartments === 'function' ? mockData.listDepartments() : [];
+      let rows = typeof prismaData.listDepartments === 'function' ? await prismaData.listDepartments() : [];
       const s = (query && query.search) || '';
       if (s) { const q = s.toLowerCase(); rows = rows.filter(d => d.name.toLowerCase().includes(q) || (d.code || '').toLowerCase().includes(q)); }
       return Object.assign({}, base, { departments: rows });
     }
     case 'approvals': {
-      let rows = typeof mockData.listApprovals === 'function' ? mockData.listApprovals() : [];
+      let rows = typeof prismaData.listApprovals === 'function' ? await prismaData.listApprovals() : [];
       const s = (query && query.search) || '';
       const st = (query && query.status) || '';
       if (s) { const q = s.toLowerCase(); rows = rows.filter(a => (a.entityType || '').toLowerCase().includes(q) || (a.entityId || '').toLowerCase().includes(q)); }
@@ -610,17 +622,17 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   const Cap     = CRUD_SLUG_TO_NAME[slug];
   const capLc   = Cap[0].toLowerCase() + Cap.slice(1);
   const schema  = (schemas[slug]) || [];
-  const hasCrud = typeof mockData['create' + Cap] === 'function';
+  const hasCrud = typeof prismaData['create' + Cap] === 'function';
 
   if (!hasCrud) continue;
 
   // GET /<slug>/:id  (detail)
-  app.get('/' + slug + '/:id', function(req, res, next) {
-    const row = mockData['get' + Cap + 'ById'](req.params.id);
+  app.get('/' + slug + '/:id', async function(req, res, next) {
+    const row = await prismaData['get' + Cap + 'ById'](req.params.id);
     if (!row) return next();
     res.render('pages/' + slug + '/detail', {
       title: row.name || row.fullName || capLc + ' ' + req.params.id,
-      slug, schema, row, sources: getSources(slug),
+      slug, schema, row, sources: await getSources(slug),
       capLc, cap: Cap,
       parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
       errors: {},
@@ -628,12 +640,12 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // GET /<slug>/new
-  app.get('/' + slug + '/new', function(req, res) {
+  app.get('/' + slug + '/new', async function(req, res) {
     res.render('pages/' + slug + '/new', {
       title:   'New ' + Cap,
       slug, schema,
       row:     {},
-      sources: getSources(slug),
+      sources: await getSources(slug),
       errors:  {},
       capLc,  cap: Cap,
       parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
@@ -641,12 +653,12 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // POST /<slug>  (create)
-  app.post('/' + slug, function(req, res) {
-    const result = mockData['create' + Cap](req.body || {});
+  app.post('/' + slug, async function(req, res) {
+    const result = await prismaData['create' + Cap](req.body || {});
     if (!result.success) {
       if (req.body._modal) {
         // Modal submit failed — re-render the list page with modal pre-opened
-        const listLocals = getListLocals(slug, {});
+        const listLocals = await getListLocals(slug, {});
         return res.status(400).render('pages/' + slug + '/index', Object.assign({}, listLocals, {
           capLc, cap: Cap,
           parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
@@ -657,7 +669,7 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
       }
       return res.status(400).render('pages/' + slug + '/new', {
         title: 'New ' + Cap, slug, schema,
-        row: req.body || {}, sources: getSources(slug),
+        row: req.body || {}, sources: await getSources(slug),
         errors: result.errors,
         capLc, cap: Cap,
         parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
@@ -667,13 +679,13 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // GET /<slug>/:id/edit
-  app.get('/' + slug + '/:id/edit', function(req, res, next) {
-    const row = mockData['get' + Cap + 'ById'](req.params.id);
+  app.get('/' + slug + '/:id/edit', async function(req, res, next) {
+    const row = await prismaData['get' + Cap + 'ById'](req.params.id);
     if (!row) return next();
     res.render('pages/' + slug + '/edit', {
       title:   'Edit ' + (row.name || row.fullName || capLc + ' ' + req.params.id),
       slug, schema,
-      row, sources: getSources(slug),
+      row, sources: await getSources(slug),
       errors:  {},
       capLc, cap: Cap,
       parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
@@ -681,13 +693,13 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // POST /<slug>/:id  (update)
-  app.post('/' + slug + '/:id', function(req, res, next) {
-    const existing = mockData['get' + Cap + 'ById'](req.params.id);
+  app.post('/' + slug + '/:id', async function(req, res, next) {
+    const existing = await prismaData['get' + Cap + 'ById'](req.params.id);
     if (!existing) return next();
-    const result = mockData['update' + Cap](req.params.id, req.body || {});
+    const result = await prismaData['update' + Cap](req.params.id, req.body || {});
     if (!result.success) {
       if (req.body._modal) {
-        const listLocals = getListLocals(slug, {});
+        const listLocals = await getListLocals(slug, {});
         return res.status(400).render('pages/' + slug + '/index', Object.assign({}, listLocals, {
           capLc, cap: Cap,
           parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
@@ -700,7 +712,7 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
         title: 'Edit ' + (existing.name || existing.fullName || req.params.id),
         slug, schema,
         row: Object.assign({}, existing, req.body || {}),
-        sources: getSources(slug),
+        sources: await getSources(slug),
         errors: result.errors,
         capLc, cap: Cap,
         parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',
@@ -710,15 +722,15 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 
   // POST /<slug>/:id/delete
-  app.post('/' + slug + '/:id/delete', function(req, res) {
-    const result = mockData['delete' + Cap](req.params.id);
+  app.post('/' + slug + '/:id/delete', async function(req, res) {
+    const result = await prismaData['delete' + Cap](req.params.id);
     if (result.success) return res.redirect('/' + slug);
     // delete failed — re-render the detail page with the FK blocker surfaced
-    const row = mockData['get' + Cap + 'ById'](req.params.id) || { id: req.params.id };
+    const row = await prismaData['get' + Cap + 'ById'](req.params.id) || { id: req.params.id };
     res.status(400).render('pages/' + slug + '/detail', {
       title: row.name || row.fullName || capLc + ' ' + req.params.id,
       slug, schema,
-      row, sources: getSources(slug),
+      row, sources: await getSources(slug),
       errors: result.errors,
       capLc, cap: Cap,
       parentCrumb: CRUD_PARENT[slug] || 'IT Inventory',

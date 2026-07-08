@@ -12,7 +12,11 @@
     "db:reset": "docker compose down -v && docker compose up -d && node scripts/wait-for-pg.js && npx prisma db push",
     "db:logs": "docker compose logs -f db",
     "db:psql": "docker compose exec db psql -U postgres -d inventory_dev",
-    "db:wait": "node scripts/wait-for-pg.js"
+    "db:wait": "node scripts/wait-for-pg.js",
+    "db:seed": "npx prisma db seed"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   },
   "engines": {
     "node": ">=18"
