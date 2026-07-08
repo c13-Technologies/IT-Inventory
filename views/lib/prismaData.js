@@ -255,6 +255,31 @@ async function getUsers() {
 }
 
 // ---------------------------------------------------------------------------
+// Audit logging — fire-and-forget writes to the auditLog table.
+// Reads userId, tenantId, ip, and userAgent from the current request context.
+// ---------------------------------------------------------------------------
+function auditLog(action, entityType, entityId, before, after) {
+  const req = _currentReq;
+  if (!req) return;
+  const userId = req.session ? req.session.userId : null;
+  const tid = req.session ? req.session.tenantId : null;
+  if (!userId || !tid) return;
+  prisma.auditLog.create({
+    data: {
+      tenantId: tid,
+      userId,
+      action,
+      entityType,
+      entityId,
+      before: before ? (typeof before === 'object' ? before : {}) : undefined,
+      after: after ? (typeof after === 'object' ? after : {}) : undefined,
+      ip: req.ip || null,
+      userAgent: req.get ? (req.get('user-agent') || null) : null,
+    },
+  }).catch(err => console.error('Audit log write failed:', err.message)); // fire-and-forget, never crash the request
+}
+
+// ---------------------------------------------------------------------------
 // CRUD mutators — one set per entity (vendors, locations, categories, users,
 // assignments, maintenance, licenses, departments, approvals)
 // The registry below generates create/update/delete/getById/list functions
@@ -311,6 +336,7 @@ for (const { slug, model, name } of CRUD_SLUGS) {
         delete data.role;
       }
       const row = await prisma[model].create({ data });
+      auditLog(model + '.create', model, row.id, null, row);
       return { success: true, data: row };
     } catch (err) {
       if (err.code === 'P2002') {
@@ -342,7 +368,10 @@ for (const { slug, model, name } of CRUD_SLUGS) {
         if (role) { data.roleId = role.id; }
         delete data.role;
       }
+      // Fetch existing row for audit 'before' snapshot
+      const before = await prisma[model].findUnique({ where: { id } });
       const row = await prisma[model].update({ where: { id }, data });
+      auditLog(model + '.update', model, row.id, before, row);
       return { success: true, data: row };
     } catch (err) {
       if (err.code === 'P2025') {
@@ -358,7 +387,10 @@ for (const { slug, model, name } of CRUD_SLUGS) {
   // delete<Name>(id) → { success } | { success: false, errors }
   crudExports['delete' + Name] = async function(id) {
     try {
+      // Fetch existing row for audit trail before deleting
+      const before = await prisma[model].findUnique({ where: { id } });
       await prisma[model].delete({ where: { id } });
+      auditLog(model + '.delete', model, id, before, null);
       return { success: true };
     } catch (err) {
       if (err.code === 'P2025') {
