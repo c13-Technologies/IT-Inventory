@@ -49,10 +49,10 @@ const locations = [
 ];
 
 const users = [
-  { id: id('usr', 1), fullName: 'Sarah Chen',     email: 'sarah.chen@c13-tech.com',  role: 'IT_MANAGER',     departmentId: 'dept_it' },
-  { id: id('usr', 2), fullName: 'Marcus Johnson', email: 'marcus.j@c13-tech.com',     role: 'IT_SUPPORT',     departmentId: 'dept_it' },
-  { id: id('usr', 3), fullName: 'Priya Patel',    email: 'priya.p@c13-tech.com',      role: 'EMPLOYEE',       departmentId: 'dept_eng' },
-  { id: id('usr', 4), fullName: 'Alex Rivera',    email: 'alex.r@c13-tech.com',       role: 'DEPARTMENT_HEAD',departmentId: 'dept_eng' },
+  { id: id('usr', 1), fullName: 'Alex Bytestorm', email: 'alex.bytestorm@c13-tech.com', role: 'IT_MANAGER',     departmentId: 'dept_it' },
+  { id: id('usr', 2), fullName: 'Billy Nick',    email: 'billy.nick@c13-tech.com',       role: 'IT_SUPPORT',     departmentId: 'dept_it' },
+  { id: id('usr', 3), fullName: 'Lydia Acheng',  email: 'lydia.acheng@c13-tech.com',     role: 'EMPLOYEE',       departmentId: 'dept_eng' },
+  { id: id('usr', 4), fullName: 'Sande Ochieno', email: 'sande.ochieno@c13-tech.com',    role: 'DEPARTMENT_HEAD',departmentId: 'dept_eng' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -140,7 +140,7 @@ const assets = [
     categoryId: categories[0].id,
     locationId: locations[2].id, // Remote
     vendorId: vendors[0].id,
-    assignedToId: users[2].id,   // Priya
+    assignedToId: users[2].id,   // Lydia
     createdById: users[0].id,
     createdAt: '2023-06-20T14:15:00Z',
     updatedAt: '2024-09-01T11:20:00Z',
@@ -168,7 +168,7 @@ const assets = [
     categoryId: categories[0].id,  // Server under "Laptops" would be wrong; will move to "Hardware" later
     locationId: locations[3].id,    // Datacenter
     vendorId: vendors[1].id,        // Dell (close enough for mock)
-    assignedToId: users[1].id,      // Marcus (support owns it)
+    assignedToId: users[1].id,      // Billy (support owns it)
     createdById: users[0].id,
     createdAt: '2024-08-05T16:00:00Z',
     updatedAt: '2024-08-05T16:00:00Z',

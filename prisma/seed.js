@@ -80,10 +80,10 @@ async function main() {
 
   // ── 4. Users ───────────────────────────────────────────────────
   const userData = [
-    { fullName: 'Sarah Chen',     email: 'sarah.chen@c13-tech.com',      roleKey: 'IT_MANAGER',      department: deptIT  },
-    { fullName: 'Marcus Johnson', email: 'marcus.j@c13-tech.com',         roleKey: 'IT_SUPPORT',      department: deptIT  },
-    { fullName: 'Priya Patel',    email: 'priya.p@c13-tech.com',          roleKey: 'EMPLOYEE',        department: deptENG },
-    { fullName: 'Alex Rivera',    email: 'alex.r@c13-tech.com',           roleKey: 'DEPARTMENT_HEAD', department: deptENG },
+    { fullName: 'Alex Bytestorm', email: 'alex.bytestorm@c13-tech.com', roleKey: 'IT_MANAGER',      department: deptIT  },
+    { fullName: 'Billy Nick',    email: 'billy.nick@c13-tech.com',       roleKey: 'IT_SUPPORT',      department: deptIT  },
+    { fullName: 'Lydia Acheng',  email: 'lydia.acheng@c13-tech.com',     roleKey: 'EMPLOYEE',        department: deptENG },
+    { fullName: 'Sande Ochieno', email: 'sande.ochieno@c13-tech.com',    roleKey: 'DEPARTMENT_HEAD', department: deptENG },
   ];
   const users = [];
   for (const u of userData) {
@@ -183,7 +183,7 @@ async function main() {
   const CAT = categories;   // 0=Laptops 1=Monitors 2=Phones 3=Tablets 4=Software 5=Peripherals
   const LOC = locations;   // 0=HQ-5F 1=HQ-6F 2=Remote 3=Datacenter
   const VEN = vendors;     // 0=Apple 1=Dell 2=Lenovo 3=Microsoft 4=Samsung
-  const USR = users;       // 0=Sarah 1=Marcus 2=Priya 3=Alex
+  const USR = users;       // 0=AlexB 1=Billy 2=Lydia 3=Sande
 
   const assetInputs = [
     // 1 — IN_STOCK, MBP 16" M3 Max
@@ -204,7 +204,7 @@ async function main() {
       attributes: { size_in: 34, panel: 'IPS', refresh_hz: 60, resolution: '3440x1440' },
       notes: null, createdById: USR[0].id,
     },
-    // 3 — ASSIGNED, MBP 14" M2 Pro → Priya
+    // 3 — ASSIGNED, MBP 14" M2 Pro → Lydia
     {
       assetTag: 'IT-0003', name: 'MacBook Pro 14" M2 Pro',
       manufacturer: 'Apple', model: 'MBP14,7', serialNumber: 'C02ZK9FGHIJ', macAddress: 'A8:5C:2C:11:7E:B2',
@@ -213,7 +213,7 @@ async function main() {
       attributes: { cpu: 'M2 Pro', ram_gb: 32, storage_gb: 1024, screen_in: 14, color: 'Silver' },
       notes: 'Extended AppleCare+ until 2026-06-20', createdById: USR[0].id,
     },
-    // 4 — ASSIGNED, HP server → Marcus
+    // 4 — ASSIGNED, HP server → Billy
     {
       assetTag: 'IT-0004', name: 'HP ProLiant DL380 Gen11',
       manufacturer: 'HP', model: 'DL380 Gen11', serialNumber: 'SGH713XYZA',
@@ -267,9 +267,9 @@ async function main() {
   console.log('  ✓ Assets: 8');
 
   // ── 9. Assignments (3) ─────────────────────────────────────────
-  // asn-1: asset[2] (MBP 14") → user[2] (Priya), assigned by user[0] (Sarah)
-  // asn-2: asset[3] (HP server) → user[1] (Marcus), assigned by user[0]
-  // asn-3: asset[2] (MBP 14") → user[3] (Alex), returned, assigned by user[0]
+  // asn-1: asset[2] (MBP 14") → user[2] (Lydia), assigned by user[0] (AlexB)
+  // asn-2: asset[3] (HP server) → user[1] (Billy), assigned by user[0]
+  // asn-3: asset[2] (MBP 14") → user[3] (Sande), returned, assigned by user[0]
   const assignmentData = [
     { assetId: assets[2].id, userId: USR[2].id, assignedById: USR[0].id, assignedAt: '2023-06-22T09:00:00Z', returnedAt: null,                     expectedReturnAt: null,         notes: 'Permanent assignment' },
     { assetId: assets[3].id, userId: USR[1].id, assignedById: USR[0].id, assignedAt: '2024-08-10T08:00:00Z', returnedAt: null,                     expectedReturnAt: null,         notes: 'Assigned to IT support' },
