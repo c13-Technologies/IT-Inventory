@@ -130,4 +130,62 @@
                                     <div id="chart-assets-by-status" data-colors='["#34c38f","#5156be","#f1b44c","#f46a6a","#74788d"]' class="apex-charts" style="height: 320px;"></div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                    <!-- end charts row -->
+
+                    <!-- Recent activity + Quick Stats row -->
+                    <div class="row">
+                        <div class="col-xl-8">
+                            <div class="card">
+                                <div class="card-header align-items-center d-flex">
+                                    <h4 class="card-title mb-0 flex-grow-1">Recent Activity</h4>
+                                    <div class="flex-shrink-0">
+                                        <a href="/audit-log" class="btn btn-soft-primary btn-sm">Full Audit Log <i class="mdi mdi-arrow-right ms-1"></i></a>
+                                    </div>
+                                </div>
+                                <div class="card-body px-0">
+                                    <div class="px-3" data-simplebar style="max-height: 360px;">
+                                        <ul class="list-unstyled activity-wid mb-0" id="recent-activity-list">
+                                            <li class="activity-list activity-border text-center text-muted py-4">
+                                                <i class="mdi mdi-loading mdi-spin font-size-20"></i> Loading activity...
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-xl-4">
+                            <div class="card card-h-100">
+                                <div class="card-body">
+                                    <h5 class="card-title mb-4">Quick Stats</h5>
+                                    <p class="mb-1">In Repair <span class="float-end" id="qs-in-repair">--</span></p>
+                                    <div class="progress mt-2" style="height: 6px;">
+                                        <div class="progress-bar bg-warning" role="progressbar" id="qs-bar-inrepair" style="width: 0%"></div>
+                                    </div>
+                                    <p class="mt-3 mb-1">Retired <span class="float-end" id="qs-retired">--</span></p>
+                                    <div class="progress mt-2" style="height: 6px;">
+                                        <div class="progress-bar bg-danger" role="progressbar" id="qs-bar-retired" style="width: 0%"></div>
+                                    </div>
+                                    <p class="mt-3 mb-1">In Stock <span class="float-end" id="qs-instock">--</span></p>
+                                    <div class="progress mt-2" style="height: 6px;">
+                                        <div class="progress-bar bg-success" role="progressbar" id="qs-bar-instock" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- end recent activity row -->
+
+                </div>
+            </div>
+        </div>
+
+        <%- include('../partials/footer') %>
+    </div>
+
+    <%- include('../partials/scripts', { pageScripts: typeof pageScripts !== 'undefined' ? pageScripts : [] }) %>
+</body>
+</html>
                  

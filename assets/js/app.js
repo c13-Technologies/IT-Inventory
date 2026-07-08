@@ -28,7 +28,8 @@
     }
 
     function l(t) {
-        document.getElementById(t).checked = !0
+        var el = document.getElementById(t);
+        if (el) el.checked = !0
     }
 
     function c() {
