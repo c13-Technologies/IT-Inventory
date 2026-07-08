@@ -269,6 +269,8 @@ for (const { slug, model, name } of CRUD_SLUGS) {
     if (Object.keys(errors).length) return { success: false, errors };
     try {
       const data = { ...(input || {}) };
+      // Strip _modal and any other non-schema fields so Prisma doesn't reject them
+      delete data._modal;
       // Inject tenantId for tenant-scoped models
       if (model !== 'approvalRequest') {
         data.tenantId = await tenantId();
@@ -310,6 +312,7 @@ for (const { slug, model, name } of CRUD_SLUGS) {
     if (Object.keys(errors).length) return { success: false, errors };
     try {
       const data = { ...(patch || {}) };
+      delete data._modal;
       for (const f of (schemas[slug] || [])) {
         if ((f.type === 'date') && data[f.key] && typeof data[f.key] === 'string') {
           data[f.key] = new Date(data[f.key]);
