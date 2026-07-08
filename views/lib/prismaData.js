@@ -386,6 +386,104 @@ async function getAssetsFlat() {
 }
 
 // ---------------------------------------------------------------------------
+// PRO sidebar page queries — license seats, warranty (derived from assets),
+// roles, audit log, notifications, webhooks.
+// ---------------------------------------------------------------------------
+
+// License seats with denormalized license/asset/user names
+async function getLicenseSeats() {
+  const tid = await tenantId();
+  const seats = await prisma.licenseSeat.findMany({
+    where: { tenantId: tid },
+    include: { license: true, asset: true, user: true },
+    orderBy: { assignedAt: 'desc' },
+  });
+  return seats.map(s => ({
+    ...s,
+    licenseName: s.license ? s.license.name : null,
+    assetName:   s.asset ? (s.asset.assetTag + ' — ' + s.asset.name) : null,
+    userName:    s.user ? s.user.fullName : null,
+  }));
+}
+
+// Warranty tracking — derived from assets that have a warranty expiry date
+async function getWarranties() {
+  const tid = await tenantId();
+  const now = new Date();
+  const soon = new Date();
+  soon.setMonth(soon.getMonth() + 3); // expiring within 3 months
+  const assets = await prisma.asset.findMany({
+    where: { tenantId: tid, warrantyExpiry: { not: null } },
+    include: { vendor: true },
+    orderBy: { warrantyExpiry: 'asc' },
+  });
+  return assets.map(a => {
+    const expiry = new Date(a.warrantyExpiry);
+    const status = expiry < now ? 'EXPIRED' : expiry < soon ? 'EXPIRING' : 'ACTIVE';
+    return {
+      ...a,
+      assetName:  a.assetTag + ' — ' + a.name,
+      vendorName: a.vendor ? a.vendor.name : null,
+      expiryDate: a.warrantyExpiry,
+      status,
+    };
+  });
+}
+
+// Roles (from seed — IT Manager, IT Support, Department Head, Employee)
+async function getRoles() {
+  const tid = await tenantId();
+  const roles = await prisma.role.findMany({
+    where: { tenantId: tid },
+    include: { _count: { select: { users: true, rolePermissions: true } } },
+    orderBy: { name: 'asc' },
+  });
+  return roles.map(r => ({
+    ...r,
+    userCount:       r._count.users,
+    permissionCount: r._count.rolePermissions,
+  }));
+}
+
+// Audit log — append-only, denormalizes user name for the view
+async function getAuditLogs() {
+  const tid = await tenantId();
+  const logs = await prisma.auditLog.findMany({
+    where: { tenantId: tid },
+    include: { user: true },
+    orderBy: { createdAt: 'desc' },
+  });
+  return logs.map(l => ({
+    ...l,
+    userName: l.user ? l.user.fullName : null,
+  }));
+}
+
+// Notifications
+async function getNotifications() {
+  const tid = await tenantId();
+  return prisma.notification.findMany({
+    where: { tenantId: tid },
+    include: { user: true },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+// Webhooks
+async function getWebhooks() {
+  const tid = await tenantId();
+  return prisma.webhookSubscription.findMany({
+    where: { tenantId: tid },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+// Reports — no dedicated table, always empty
+function getReports() {
+  return [];
+}
+
+// ---------------------------------------------------------------------------
 // Module exports — mirrors mockData.js exactly
 // ---------------------------------------------------------------------------
 module.exports = Object.assign({
@@ -403,6 +501,14 @@ module.exports = Object.assign({
   getVendors,
   getLocations,
   getUsers,
+  // PRO sidebar queries
+  getLicenseSeats,
+  getWarranties,
+  getRoles,
+  getAuditLogs,
+  getReports,
+  getNotifications,
+  getWebhooks,
   // Constants
   AssetStatus: {
     IN_STOCK:  'IN_STOCK',

@@ -356,7 +356,7 @@ app.get('/approvals', async (req, res) => {
 // ----------------------------------------------------------------------
 
 app.get('/license-seats', async (req, res) => {
-  let rows = typeof prismaData.listLicenseSeats === 'function' ? await prismaData.listLicenseSeats() : [];
+  let rows = await prismaData.getLicenseSeats();
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -376,7 +376,7 @@ app.get('/license-seats', async (req, res) => {
 });
 
 app.get('/warranty', async (req, res) => {
-  let rows = typeof prismaData.listWarranties === 'function' ? await prismaData.listWarranties() : [];
+  let rows = await prismaData.getWarranties();
   const search = req.query.search || '';
   const status = req.query.status || '';
   if (search) {
@@ -398,7 +398,7 @@ app.get('/warranty', async (req, res) => {
 });
 
 app.get('/roles', async (req, res) => {
-  let rows = typeof prismaData.listRoles === 'function' ? await prismaData.listRoles() : [];
+  let rows = await prismaData.getRoles();
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -417,7 +417,7 @@ app.get('/roles', async (req, res) => {
 });
 
 app.get('/audit-log', async (req, res) => {
-  let rows = typeof prismaData.listAuditLogs === 'function' ? await prismaData.listAuditLogs() : [];
+  let rows = await prismaData.getAuditLogs();
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -425,7 +425,7 @@ app.get('/audit-log', async (req, res) => {
       (e.action || '').toLowerCase().includes(q) ||
       (e.entityType || '').toLowerCase().includes(q) ||
       (e.entityId || '').toLowerCase().includes(q) ||
-      (e.userName || '').toLowerCase().includes(q)
+      ((e.user && e.user.fullName) || '').toLowerCase().includes(q)
     );
   }
   res.render('pages/audit-log/index', {
@@ -438,7 +438,7 @@ app.get('/audit-log', async (req, res) => {
 });
 
 app.get('/reports', async (req, res) => {
-  let rows = typeof prismaData.listReports === 'function' ? await prismaData.listReports() : [];
+  let rows = prismaData.getReports();
   const search = req.query.search || '';
   if (search) {
     const q = search.toLowerCase();
@@ -454,7 +454,7 @@ app.get('/reports', async (req, res) => {
 });
 
 app.get('/notifications', async (req, res) => {
-  let rows = typeof prismaData.listNotifications === 'function' ? await prismaData.listNotifications() : [];
+  let rows = await prismaData.getNotifications();
   const search = req.query.search || '';
   const status = req.query.status || '';
   if (search) {
@@ -477,7 +477,7 @@ app.get('/notifications', async (req, res) => {
 });
 
 app.get('/webhooks', async (req, res) => {
-  let rows = typeof prismaData.listWebhooks === 'function' ? await prismaData.listWebhooks() : [];
+  let rows = await prismaData.getWebhooks();
   const search = req.query.search || '';
   const channel = req.query.status || '';
   if (search) {
