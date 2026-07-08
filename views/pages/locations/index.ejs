@@ -68,7 +68,7 @@
           </div>
 
           <% var _lMap = {}; locations.forEach(function(l) { _lMap[l.id] = l; }); %>
-          <script>window.__CRUD_ROWS__ = <%= JSON.stringify(_lMap) %>;</script>
+          <script>window.__CRUD_ROWS__ = <%- JSON.stringify(_lMap) %>;</script>
 
           <%- include('../../partials/modals/crud-modal', { slug: 'locations', cap: 'Location', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>

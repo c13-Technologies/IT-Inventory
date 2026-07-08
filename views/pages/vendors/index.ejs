@@ -77,7 +77,7 @@
           </div>
 
           <% var _vMap = {}; vendors.forEach(function(v) { _vMap[v.id] = v; }); %>
-          <script>window.__CRUD_ROWS__ = <%= JSON.stringify(_vMap) %>;</script>
+          <script>window.__CRUD_ROWS__ = <%- JSON.stringify(_vMap) %>;</script>
 
           <%- include('../../partials/modals/crud-modal', { slug: 'vendors', cap: 'Vendor', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>

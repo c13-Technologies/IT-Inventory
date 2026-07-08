@@ -68,7 +68,7 @@
           </div>
 
           <% var _cMap = {}; categories.forEach(function(c) { _cMap[c.id] = c; }); %>
-          <script>window.__CRUD_ROWS__ = <%= JSON.stringify(_cMap) %>;</script>
+          <script>window.__CRUD_ROWS__ = <%- JSON.stringify(_cMap) %>;</script>
 
           <%- include('../../partials/modals/crud-modal', { slug: 'categories', cap: 'Category', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>

@@ -70,7 +70,7 @@
           </div>
 
           <% var _aMap = {}; assignments.forEach(function(a) { _aMap[a.id] = a; }); %>
-          <script>window.__CRUD_ROWS__ = <%= JSON.stringify(_aMap) %>;</script>
+          <script>window.__CRUD_ROWS__ = <%- JSON.stringify(_aMap) %>;</script>
 
           <%- include('../../partials/modals/crud-modal', { slug: 'assignments', cap: 'Assignment', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>

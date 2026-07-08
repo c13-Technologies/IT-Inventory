@@ -68,7 +68,7 @@
           </div>
 
           <% var _apMap = {}; approvals.forEach(function(a) { _apMap[a.id] = a; }); %>
-          <script>window.__CRUD_ROWS__ = <%= JSON.stringify(_apMap) %>;</script>
+          <script>window.__CRUD_ROWS__ = <%- JSON.stringify(_apMap) %>;</script>
 
           <%- include('../../partials/modals/crud-modal', { slug: 'approvals', cap: 'Approval', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>

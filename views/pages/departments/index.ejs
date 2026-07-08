@@ -66,7 +66,7 @@
           </div>
 
           <% var _dMap = {}; departments.forEach(function(d) { _dMap[d.id] = d; }); %>
-          <script>window.__CRUD_ROWS__ = <%= JSON.stringify(_dMap) %>;</script>
+          <script>window.__CRUD_ROWS__ = <%- JSON.stringify(_dMap) %>;</script>
 
           <%- include('../../partials/modals/crud-modal', { slug: 'departments', cap: 'Department', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>
