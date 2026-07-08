@@ -324,8 +324,74 @@ app.post('/profile/password', requireAuth, async (req, res) => {
 });
 
 // Root — all authenticated users can see the dashboard
-app.get('/', requireAuth, (_req, res) => {
-  res.render('pages/index', { title: TITLES['index'] || 'Dashboard' });
+app.get('/', requireAuth, async (_req, res) => {
+  res.render('pages/index', {
+    title: TITLES['index'] || 'Dashboard',
+    pageScripts: ['assets/libs/apexcharts/apexcharts.min.js', 'assets/js/pages/dashboard.init.js'],
+  });
+});
+
+// API — dashboard statistics (used by the ApexCharts dashboard.init.js)
+app.get('/api/dashboard/stats', requireAuth, async (_req, res) => {
+  try {
+    const tid = _req.session.tenantId;
+    const [
+      allAssets,
+      totalUsers,
+      totalVendors,
+      totalLocations,
+      recentAudit,
+    ] = await Promise.all([
+      prisma.asset.findMany({ where: { tenantId: tid }, select: { status: true, categoryId: true } }),
+      prisma.user.count({ where: { tenantId: tid } }),
+      prisma.vendor.count({ where: { tenantId: tid } }),
+      prisma.location.count({ where: { tenantId: tid } }),
+      prisma.auditLog.findMany({ where: { tenantId: tid }, include: { user: true }, orderBy: { createdAt: 'desc' }, take: 10 }),
+    ]);
+
+    // Group by status in JS
+    const statusMap = {};
+    allAssets.forEach(a => {
+      statusMap[a.status] = (statusMap[a.status] || 0) + 1;
+    });
+    const assetsByStatus = Object.entries(statusMap).map(([status, count]) => ({ status, count }));
+
+    // Group by category in JS
+    const catMap = {};
+    allAssets.forEach(a => {
+      if (a.categoryId) catMap[a.categoryId] = (catMap[a.categoryId] || 0) + 1;
+    });
+    // Resolve category names
+    const categoryIds = Object.keys(catMap);
+    const categories = categoryIds.length
+      ? await prisma.category.findMany({ where: { id: { in: categoryIds } } })
+      : [];
+    const nameMap = {};
+    categories.forEach(c => { nameMap[c.id] = c.name; });
+    const assetsByCategory = Object.entries(catMap)
+      .map(([catId, count]) => ({ category: nameMap[catId] || 'Uncategorized', count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8);
+
+    res.json({
+      totalAssets: allAssets.length,
+      assetsByStatus,
+      assetsByCategory,
+      totalUsers,
+      totalVendors,
+      totalLocations,
+      recentActivity: recentAudit.map(e => ({
+        action: e.action,
+        entityType: e.entityType,
+        entityId: e.entityId,
+        userName: e.user ? e.user.fullName : 'System',
+        createdAt: e.createdAt,
+      })),
+    });
+  } catch (err) {
+    console.error('Dashboard stats error:', err);
+    res.status(500).json({ error: 'Failed to load dashboard statistics.' });
+  }
 });
 
 // Error pages — set the right HTTP status before rendering the template.
