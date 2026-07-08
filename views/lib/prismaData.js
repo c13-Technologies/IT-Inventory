@@ -416,6 +416,39 @@ for (const { slug, model, name } of CRUD_SLUGS) {
   };
 }
 
+// Dedicated user detail query — includes role, department, assigned assets,
+// and audit history for the user detail page.
+async function getUserDetail(id) {
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      role: true,
+      department: true,
+    },
+  });
+  if (!user) return null;
+  // Fetch active assignments (not returned) and audit log in parallel
+  const [activeAssignments, auditLogs] = await Promise.all([
+    prisma.assignment.findMany({
+      where: { userId: id, returnedAt: null },
+      include: { asset: true },
+      orderBy: { assignedAt: 'desc' },
+    }),
+    prisma.auditLog.findMany({
+      where: { userId: id, tenantId: user.tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    }),
+  ]);
+  return {
+    ...user,
+    role: user.role ? user.role.name.toUpperCase().replace(/ /g, '_') : null,
+    department: user.department || null,
+    activeAssignments,
+    auditLogs,
+  };
+}
+
 // Also add per-slug get<Name>s aliases (used by server.js's getSources())
 for (const { slug, model, name } of CRUD_SLUGS) {
   if (slug === 'maintenance' || slug === 'assignments') continue; // handled above
@@ -549,6 +582,7 @@ module.exports = Object.assign({
   getVendors,
   getLocations,
   getUsers,
+  getUserDetail,
   // PRO sidebar queries
   getLicenseSeats,
   getWarranties,

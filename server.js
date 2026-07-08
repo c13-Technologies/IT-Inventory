@@ -452,6 +452,25 @@ app.get('/assets/:id/qr', requireAuth, can('assets:read'), async (req, res, next
 // arrays from the route.
 // ----------------------------------------------------------------------
 
+// Dedicated user detail route — defined before the CRUD loop so it takes
+// precedence over the generic GET /users/:id handler. Shows enriched data.
+app.get('/users/:id', requireAuth, can('directory:read'), async (req, res, next) => {
+  const user = await prismaData.getUserDetail(req.params.id);
+  if (!user) return next();
+  res.render('pages/users/detail', {
+    title:       user.fullName,
+    slug:        'users',
+    row:         user,
+    user:        user,
+    schema:      schemas['users'] || [],
+    sources:     await getSources('users'),
+    parentCrumb: 'Directory',
+    capLc:       'user',
+    cap:         'User',
+    errors:      {},
+  });
+});
+
 // Directory — model-driven, mockData-backed
 app.get('/vendors', requireAuth, can('directory:read'), async (req, res) => {
   let rows = await prismaData.getVendors();

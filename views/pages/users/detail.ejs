@@ -5,17 +5,6 @@
     <%- include('../../partials/topbar') %>
     <%- include('../../partials/sidebar') %>
 
-<% const renderValue = function(row, f, sources) {
-     if (!row || row[f.key] === undefined || row[f.key] === null || row[f.key] === '') return '—';
-     if (f.type === 'select-fk') {
-       var items = (sources && sources[f.source]) || [];
-       var found = items.find(function(x){ return x.id === row[f.key]; });
-       return found ? (found.name || found.fullName || found.id) : row[f.key];
-     }
-     if (f.type === 'date') return String(row[f.key]).slice(0, 10);
-     return String(row[f.key]).replace(/_/g, ' ');
-   }; %>
-
     <div class="main-content">
       <div class="page-content">
         <div class="container-fluid">
@@ -27,7 +16,7 @@
                 <div class="page-title-right">
                   <%- include('../../partials/breadcrumb', { items: [
                     { label: 'Home', href: '/' },
-                    { label: parentCrumb, href: '/' + slug },
+                    { label: 'Directory', href: '/users' },
                     { label: title, href: null }
                   ] }) %>
                 </div>
@@ -36,35 +25,117 @@
           </div>
 
           <div class="row">
-            <div class="col-lg-8">
+            <!-- Profile Card -->
+            <div class="col-lg-4">
               <div class="card">
-                <div class="card-body">
-                  <% if (errors && errors._global) { %>
-                    <div class="alert alert-danger"><i class="bx bx-error-circle me-1"></i><%= errors._global %></div>
-                  <% } %>
-                  <dl class="row mb-0">
-                    <% (schema || []).forEach(function(f) { %>
-                      <dt class="col-sm-4 text-muted fw-normal"><%= f.label %></dt>
-                      <dd class="col-sm-8"><%- renderValue(row, f, sources) %></dd>
-                    <% }); %>
-                    <dt class="col-sm-4 text-muted fw-normal">ID</dt>
-                    <dd class="col-sm-8"><code class="text-muted"><%= row.id %></code></dd>
-                  </dl>
+                <div class="card-body text-center">
+                  <div class="avatar-lg mx-auto mb-3">
+                    <span class="avatar-title rounded-circle bg-primary-subtle text-primary font-size-24">
+                      <%= (row.fullName || 'U').charAt(0).toUpperCase() %>
+                    </span>
+                  </div>
+                  <h5 class="mb-1"><%= row.fullName %></h5>
+                  <p class="text-muted mb-2"><% if (typeof row.role === 'string') { %><%= row.role.replace(/_/g, ' ') %><% } else { %>—<% } %></p>
+
+                  <div class="text-start mt-4">
+                    <div class="d-flex justify-content-between border-bottom py-2">
+                      <span class="text-muted">Email</span>
+                      <a href="mailto:<%= row.email %>" class="text-reset fw-medium"><%= row.email %></a>
+                    </div>
+                    <div class="d-flex justify-content-between border-bottom py-2">
+                      <span class="text-muted">Status</span>
+                      <span class="badge bg-<%= row.status === 'ACTIVE' ? 'success' : row.status === 'PENDING' ? 'warning' : 'secondary' %>"><%= row.status || 'ACTIVE' %></span>
+                    </div>
+                    <% if (row.department && row.department.name) { %>
+                    <div class="d-flex justify-content-between border-bottom py-2">
+                      <span class="text-muted">Department</span>
+                      <span class="fw-medium"><%= row.department.name %></span>
+                    </div>
+                    <% } %>
+                    <div class="d-flex justify-content-between border-bottom py-2">
+                      <span class="text-muted">Last Login</span>
+                      <span class="fw-medium"><%= row.lastLoginAt ? new Date(row.lastLoginAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) : 'Never' %></span>
+                    </div>
+                    <div class="d-flex justify-content-between border-bottom py-2">
+                      <span class="text-muted">Joined</span>
+                      <span class="fw-medium"><%= new Date(row.createdAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) %></span>
+                    </div>
+                  </div>
                 </div>
                 <div class="card-footer d-flex gap-2">
-                  <a href="/<%= slug %>/<%= row.id %>/edit" class="btn btn-primary">
+                  <a href="/users/<%= row.id %>/edit" class="btn btn-primary btn-sm">
                     <i class="bx bx-edit me-1"></i>Edit
                   </a>
-                  <a href="/<%= slug %>" class="btn btn-light">
-                    <i class="bx bx-arrow-back me-1"></i>Back to list
-                  </a>
-                  <form method="POST" action="/<%= slug %>/<%= row.id %>/delete"
-                        onsubmit="return confirm('Delete this <%= capLc %>? This cannot be undone.');"
-                        class="ms-auto">
-                    <button type="submit" class="btn btn-outline-danger">
-                      <i class="bx bx-trash me-1"></i>Delete
-                    </button>
-                  </form>
+                  <a href="/users" class="btn btn-light btn-sm">Back</a>
+                </div>
+              </div>
+            </div>
+
+            <!-- Assigned Assets & Audit History -->
+            <div class="col-lg-8">
+              <!-- Active Assignments -->
+              <div class="card">
+                <div class="card-body">
+                  <h5 class="card-title mb-3"><i class="bx bx-laptop me-1"></i>Assigned Assets</h5>
+                  <% if (!row.activeAssignments || row.activeAssignments.length === 0) { %>
+                    <p class="text-muted mb-0">No assets currently assigned.</p>
+                  <% } else { %>
+                    <div class="table-responsive">
+                      <table class="table table-sm table-nowrap align-middle mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Asset</th>
+                            <th>Tag</th>
+                            <th>Assigned</th>
+                            <th>Notes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% row.activeAssignments.forEach(function(a) { %>
+                            <tr>
+                              <td>
+                                <strong><a href="/assets/<%= a.asset ? a.asset.id : '#' %>" class="text-reset"><%= a.asset ? a.asset.name : a.assetId %></a></strong>
+                              </td>
+                              <td><code class="text-muted"><%= a.asset ? a.asset.assetTag : '—' %></code></td>
+                              <td class="text-muted small"><%= new Date(a.assignedAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) %></td>
+                              <td class="text-muted small"><%= a.notes || '—' %></td>
+                            </tr>
+                          <% }); %>
+                        </tbody>
+                      </table>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+
+              <!-- Audit History -->
+              <div class="card">
+                <div class="card-body">
+                  <h5 class="card-title mb-3"><i class="bx bx-history me-1"></i>Audit History</h5>
+                  <% if (!row.auditLogs || row.auditLogs.length === 0) { %>
+                    <p class="text-muted mb-0">No audit entries yet.</p>
+                  <% } else { %>
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                      <table class="table table-sm table-nowrap align-middle mb-0">
+                        <thead class="table-light">
+                          <tr>
+                            <th>Action</th>
+                            <th>Entity</th>
+                            <th>Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <% row.auditLogs.forEach(function(l) { %>
+                            <tr>
+                              <td><span class="badge bg-<%= (l.action || '').includes('create') ? 'success' : (l.action || '').includes('delete') ? 'danger' : (l.action || '').includes('update') ? 'warning' : 'secondary' %>"><%= l.action %></span></td>
+                              <td class="small"><%= l.entityType %> <code class="text-muted"><%= l.entityId.substring(0, 8) %>…</code></td>
+                              <td class="text-muted small"><%= new Date(l.createdAt).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) %></td>
+                            </tr>
+                          <% }); %>
+                        </tbody>
+                      </table>
+                    </div>
+                  <% } %>
                 </div>
               </div>
             </div>
