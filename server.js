@@ -182,6 +182,7 @@ const PERMISSIONS = {
     'lifecycle:read', 'lifecycle:write',
     'directory:read', 'directory:write',
     'inventory:read', 'inventory:write',
+    'dashboard:read',
     'admin:read', 'admin:write',
     'communications:read', 'communications:write',
   ],
@@ -190,6 +191,7 @@ const PERMISSIONS = {
     'lifecycle:read', 'lifecycle:write',
     'directory:read',
     'inventory:read',
+    'dashboard:read',
     'admin:read',
     'communications:read',
   ],
@@ -347,16 +349,42 @@ app.post('/profile/password', requireAuth, async (req, res) => {
   }
 });
 
-// Root — all authenticated users can see the dashboard
-app.get('/', requireAuth, async (_req, res) => {
+// Root — dashboard with a permission gate. Users WITH 'dashboard:read'
+// (IT_MANAGER, IT_SUPPORT) see the full tenant-aggregate dashboard.
+// Everyone else is redirected to /assets — the lowest-tier page every
+// role has assets:read for. The gate matches the two /api/dashboard/*
+// endpoints below so the UI can never silently succeed (empty chart)
+// OR fail (403 toast) with data the user's role shouldn't see.
+app.get('/', requireAuth, async (req, res) => {
+  if (!(PERMISSIONS[req.session.userRole] || []).includes('dashboard:read')) {
+    return res.redirect('/assets');
+  }
   res.render('pages/index', {
     title: TITLES['index'] || 'Dashboard',
     pageScripts: ['assets/libs/apexcharts/apexcharts.min.js', 'assets/js/pages/dashboard.init.js'],
   });
 });
 
+// ----------------------------------------------------------------------
+// JSON API helper. Centralises the (requireAuth + can(...)) gate so
+// every /api/* endpoint below is RBAC-enforced by construction — a new
+// JSON route is a one-liner via apiRoute(method, slug, subPath, perm,
+// handler). Direct app.get/app.post(...) calls with paths starting
+// /api/ are forbidden by convention; reviewers should reject additions
+// that bypass this gate.
+//   method      — 'get'|'post'|'put'|'patch'|'delete'
+//   slug        — namespace (sidebar CRUD slug OR dedicated JSON slug)
+//   subPath     — optional URL tail (default '')
+//   permSuffix  — 'read'|'write' (gate is `<slug>:<permSuffix>`)
+//   handler     — async (req, res, next) => ...
+// ----------------------------------------------------------------------
+function apiRoute(method, slug, subPath, permSuffix, handler) {
+  const path = '/api/' + slug + (subPath || '');
+  app[method](path, requireAuth, can(slug + ':' + permSuffix), handler);
+}
+
 // API — dashboard statistics (used by the ApexCharts dashboard.init.js)
-app.get('/api/dashboard/stats', requireAuth, async (_req, res) => {
+apiRoute('get', 'dashboard', '/stats', 'read', async (_req, res) => {
   try {
     const tid = _req.session.tenantId;
     const [
@@ -422,7 +450,7 @@ app.get('/api/dashboard/stats', requireAuth, async (_req, res) => {
 //   Returns counts per day for the last 7 days (oldest -> newest).
 //   Each metric is numerically aligned with the `labels` array so the
 //   client can render Apache-style sparklines without re-pivoting.
-app.get('/api/dashboard/trends', requireAuth, async (_req, res) => {
+apiRoute('get', 'dashboard', '/trends', 'read', async (_req, res) => {
   try {
     const tid = _req.session.tenantId;
     const DAYS = 7;
