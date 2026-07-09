@@ -1,0 +1,123 @@
+<%# views/partials/modals/view-category.ejs
+   Shared Bootstrap modal showing details of one asset category.
+   Triggered from the /categories list via [data-bs-toggle="modal"]
+   on the row's [View] button. Edit / Delete reuse the existing
+   crud-modal and deleteModal helpers. Back just closes this modal.
+   Locals: (none — uses window.__CRUD_ROWS__ populated by the list page)
+%>
+<div class="modal fade" id="viewCategoryModal" tabindex="-1" aria-labelledby="viewCategoryModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="viewCategoryModalLabel">
+          <i class="bx bx-category me-1"></i>Category details
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <dl class="row mb-0" id="viewCategoryFields">
+          <dt class="col-sm-4 text-muted fw-normal">Name</dt>
+          <dd class="col-sm-8" data-field="name">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Type</dt>
+          <dd class="col-sm-8" data-field="type">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Description</dt>
+          <dd class="col-sm-8" data-field="description">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Parent</dt>
+          <dd class="col-sm-8" data-field="parent">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">ID</dt>
+          <dd class="col-sm-8"><code class="text-muted" data-field="id">&mdash;</code></dd>
+        </dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+          <i class="bx bx-arrow-back me-1"></i>Back
+        </button>
+        <button type="button" class="btn btn-outline-danger" id="viewCategoryDeleteBtn">
+          <i class="bx bx-trash me-1"></i>Delete
+        </button>
+        <a class="btn btn-primary disabled" id="viewCategoryEditBtn" tabindex="-1" aria-disabled="true">
+          <i class="bx bx-edit me-1"></i>Edit
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var modalEl  = document.getElementById('viewCategoryModal');
+  if (!modalEl) return;
+
+  var titleEl  = document.getElementById('viewCategoryModalLabel');
+  var editBtn  = document.getElementById('viewCategoryEditBtn');
+  var delBtn   = document.getElementById('viewCategoryDeleteBtn');
+  var fieldEls = modalEl.querySelectorAll('[data-field]');
+
+  function displayVal(v) {
+    if (v == null || v === '') return '\u2014';
+    return String(v).replace(/_/g, ' ');
+  }
+
+  // Resolve the parent category's display name from window.__CRUD_PARENT_MAP__
+  // (set by the /categories list page when it rendered) so the modal shows
+  // the parent's name rather than a raw category id. Falls back to raw id.
+  function parentDisplay(row) {
+    if (!row.parentId) return '\u2014 top-level \u2014';
+    var map = window.__CRUD_PARENT_MAP__ || {};
+    var p = map[row.parentId];
+    if (p && p.name) return p.name;
+    return row.parentId;
+  }
+
+  function populateCategoryModal(row) {
+    var name = (row.name || '').trim();
+    if (titleEl) titleEl.textContent = name || 'Category details';
+
+    var map = {
+      name:        row.name,
+      type:        row.type,
+      description: row.description,
+      parent:      parentDisplay(row),
+      id:          row.id,
+    };
+    fieldEls.forEach(function(el) {
+      el.textContent = displayVal(map[el.dataset.field]);
+    });
+
+    if (editBtn) {
+      editBtn.href = '/categories/' + row.id + '/edit';
+      editBtn.removeAttribute('aria-disabled');
+      editBtn.removeAttribute('tabindex');
+    }
+    if (delBtn) {
+      if (typeof window.openDeleteModal === 'function') {
+        delBtn.style.display = '';
+        delBtn.onclick = function() {
+          var modalBs = bootstrap.Modal.getInstance(modalEl);
+          if (modalBs) modalBs.hide();
+          window.openDeleteModal('categories', row.id, 'category');
+        };
+      } else {
+        delBtn.style.display = 'none';
+      }
+    }
+  }
+
+  modalEl.addEventListener('show.bs.modal', function(ev) {
+    var btn = ev.relatedTarget;
+    var id = btn && btn.dataset && btn.dataset.rowId;
+    if (!id) return;
+    var row = (window.__CRUD_ROWS__ || {})[id];
+    if (!row) { console.warn('viewCategoryModal: no row in __CRUD_ROWS__ for id', id); return; }
+    populateCategoryModal(row);
+  });
+
+  window.openViewCategoryModal = function(rowId) {
+    var row = (window.__CRUD_ROWS__ || {})[rowId];
+    if (!row) { console.warn('openViewCategoryModal: no row in __CRUD_ROWS__ for id', rowId); return; }
+    populateCategoryModal(row);
+    var modalBs = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modalBs.show();
+  };
+});
+</script>

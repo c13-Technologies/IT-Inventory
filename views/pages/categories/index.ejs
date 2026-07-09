@@ -55,7 +55,7 @@
                               <td><span class="badge bg-primary-subtle text-primary"><%= c.type %></span></td>
                               <td class="text-muted small"><%= c.description || '—' %></td>
                               <td><%- c.parentId ? '<code class="text-muted">' + c.parentId + '</code>' : '<span class="text-muted">— top-level —</span>' %></td>
-                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'categories', id: c.id, capLc: 'category', modalMode: true }) %></td>
+                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'categories', id: c.id, capLc: 'category', modalMode: true, viewMode: 'modal', viewModalTarget: '#viewCategoryModal' }) %></td>
                             </tr>
                           <% }); %>
                         </tbody>
@@ -70,8 +70,14 @@
           <% var _cMap = {}; categories.forEach(function(c) { _cMap[c.id] = c; }); %>
           <script>window.__CRUD_ROWS__ = <%- JSON.stringify(_cMap) %>;</script>
 
+          <%# Expose parentId -> category row map so the view-category modal
+              can resolve a parent reference into a display name instead of
+              a raw cuid. %>
+          <script>window.__CRUD_PARENT_MAP__ = <%- JSON.stringify(_cMap) %>;</script>
+
           <%- include('../../partials/modals/crud-modal', { slug: 'categories', cap: 'Category', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>
+          <%- include('../../partials/modals/view-category') %>
 
         </div>
       </div>

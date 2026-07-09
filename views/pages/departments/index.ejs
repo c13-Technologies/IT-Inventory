@@ -53,7 +53,7 @@
                               <td><strong><%= d.name %></strong></td>
                               <td><code><%= d.code || '—' %></code></td>
                               <td><% if (d.headId) { var h = ((sources && sources.users) || []).find(function(u){ return u.id === d.headId; }); %><%= h ? h.fullName : '<code class="text-muted">' + d.headId + '</code>' %><% } else { %>—<% } %></td>
-                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'departments', id: d.id, capLc: 'department', modalMode: true }) %></td>
+                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'departments', id: d.id, capLc: 'department', modalMode: true, viewMode: 'modal', viewModalTarget: '#viewDepartmentModal' }) %></td>
                             </tr>
                           <% }); %>
                         </tbody>
@@ -68,8 +68,15 @@
           <% var _dMap = {}; departments.forEach(function(d) { _dMap[d.id] = d; }); %>
           <script>window.__CRUD_ROWS__ = <%- JSON.stringify(_dMap) %>;</script>
 
+          <%# Expose headId -> user row map so the view-department modal can
+              resolve a department's head into a display name instead of a
+              raw cuid. %>
+          <% var _hMap = {}; ((sources && sources.users) || []).forEach(function(u) { _hMap[u.id] = u; }); %>
+          <script>window.__CRUD_HEAD_MAP__ = <%- JSON.stringify(_hMap) %>;</script>
+
           <%- include('../../partials/modals/crud-modal', { slug: 'departments', cap: 'Department', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>
+          <%- include('../../partials/modals/view-department') %>
 
         </div>
       </div>

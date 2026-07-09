@@ -64,7 +64,7 @@
                               <td><a href="mailto:<%= v.email %>" class="text-reset"><%= v.email || '—' %></a></td>
                               <td><%= v.phone || '—' %></td>
                               <td><span class="badge bg-<%= v.status === 'ACTIVE' ? 'success' : 'secondary' %>"><%= v.status %></span></td>
-                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'vendors', id: v.id, capLc: 'vendor', modalMode: true }) %></td>
+                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'vendors', id: v.id, capLc: 'vendor', modalMode: true, viewMode: 'modal', viewModalTarget: '#viewVendorModal' }) %></td>
                             </tr>
                           <% }); %>
                         </tbody>
@@ -81,6 +81,7 @@
 
           <%- include('../../partials/modals/crud-modal', { slug: 'vendors', cap: 'Vendor', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>
+          <%- include('../../partials/modals/view-vendor') %>
 
         </div>
       </div>

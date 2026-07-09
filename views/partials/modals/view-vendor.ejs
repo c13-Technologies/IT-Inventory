@@ -1,0 +1,121 @@
+<%# views/partials/modals/view-vendor.ejs
+   Shared Bootstrap modal showing details of one vendor.
+   Triggered from the /vendors list via [data-bs-toggle="modal"]
+   on the row's [View] button. Edit / Delete reuse the existing
+   crud-modal and deleteModal helpers. Back just closes this modal.
+   Locals: (none — uses window.__CRUD_ROWS__ populated by the list page)
+%>
+<div class="modal fade" id="viewVendorModal" tabindex="-1" aria-labelledby="viewVendorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="viewVendorModalLabel">
+          <i class="bx bx-store me-1"></i>Vendor details
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <dl class="row mb-0" id="viewVendorFields">
+          <dt class="col-sm-4 text-muted fw-normal">Name</dt>
+          <dd class="col-sm-8" data-field="name">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Contact person</dt>
+          <dd class="col-sm-8" data-field="contactPerson">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Email</dt>
+          <dd class="col-sm-8" data-field="email">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Phone</dt>
+          <dd class="col-sm-8" data-field="phone">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Status</dt>
+          <dd class="col-sm-8" data-field="status">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Address</dt>
+          <dd class="col-sm-8" data-field="address">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Website</dt>
+          <dd class="col-sm-8" data-field="website">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">ID</dt>
+          <dd class="col-sm-8"><code class="text-muted" data-field="id">&mdash;</code></dd>
+        </dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+          <i class="bx bx-arrow-back me-1"></i>Back
+        </button>
+        <button type="button" class="btn btn-outline-danger" id="viewVendorDeleteBtn">
+          <i class="bx bx-trash me-1"></i>Delete
+        </button>
+        <a class="btn btn-primary disabled" id="viewVendorEditBtn" tabindex="-1" aria-disabled="true">
+          <i class="bx bx-edit me-1"></i>Edit
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var modalEl  = document.getElementById('viewVendorModal');
+  if (!modalEl) return;
+
+  var titleEl  = document.getElementById('viewVendorModalLabel');
+  var editBtn  = document.getElementById('viewVendorEditBtn');
+  var delBtn   = document.getElementById('viewVendorDeleteBtn');
+  var fieldEls = modalEl.querySelectorAll('[data-field]');
+
+  function displayVal(v) {
+    if (v == null || v === '') return '\u2014';
+    return String(v).replace(/_/g, ' ');
+  }
+
+  function populateVendorModal(row) {
+    var name = (row.name || '').trim();
+    if (titleEl) titleEl.textContent = name || 'Vendor details';
+
+    var map = {
+      name:          row.name,
+      contactPerson: row.contactPerson,
+      email:         row.email,
+      phone:         row.phone,
+      status:        row.status,
+      address:       row.address,
+      website:       row.website,
+      id:            row.id,
+    };
+    fieldEls.forEach(function(el) {
+      el.textContent = displayVal(map[el.dataset.field]);
+    });
+
+    if (editBtn) {
+      editBtn.href = '/vendors/' + row.id + '/edit';
+      editBtn.removeAttribute('aria-disabled');
+      editBtn.removeAttribute('tabindex');
+    }
+    if (delBtn) {
+      if (typeof window.openDeleteModal === 'function') {
+        delBtn.style.display = '';
+        delBtn.onclick = function() {
+          var modalBs = bootstrap.Modal.getInstance(modalEl);
+          if (modalBs) modalBs.hide();
+          window.openDeleteModal('vendors', row.id, 'vendor');
+        };
+      } else {
+        delBtn.style.display = 'none';
+      }
+    }
+  }
+
+  modalEl.addEventListener('show.bs.modal', function(ev) {
+    var btn = ev.relatedTarget;
+    var id = btn && btn.dataset && btn.dataset.rowId;
+    if (!id) return;
+    var row = (window.__CRUD_ROWS__ || {})[id];
+    if (!row) { console.warn('viewVendorModal: no row in __CRUD_ROWS__ for id', id); return; }
+    populateVendorModal(row);
+  });
+
+  window.openViewVendorModal = function(rowId) {
+    var row = (window.__CRUD_ROWS__ || {})[rowId];
+    if (!row) { console.warn('openViewVendorModal: no row in __CRUD_ROWS__ for id', rowId); return; }
+    populateVendorModal(row);
+    var modalBs = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modalBs.show();
+  };
+});
+</script>
