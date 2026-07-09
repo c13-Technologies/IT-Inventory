@@ -385,8 +385,26 @@ for (const { slug, model, name } of CRUD_SLUGS) {
         if (role) { data.roleId = role.id; }
         delete data.role;
       }
-      // Fetch existing row for audit 'before' snapshot
-      const before = await prisma[model].findUnique({ where: { id } });
+      // Fetch existing row for audit 'before' snapshot, scoped to this
+      // tenant so a write-capable role in tenant A cannot mutate a
+      // foreign tenant's row by guessing the cuid. We use findFirst
+      // (not the compound `{ id, tenantId }` unique predicate) because
+      // Prisma's `update`/`delete` only accept a `WhereUniqueInput`
+      // (the @id / @unique fields). id is the only unique field on
+      // every CRUD entity, so the pre-check + single-row update is the
+      // correct shape. The subsequent update is then safe to use the
+      // global { id } key.
+      //
+      // On a tenant-block we ALSO write a '*.tenant-blocked' audit row
+      // so an admin reviewing /audit-log can see the probing attempt;
+      // the user-facing error stays identical to a true "not found"
+      // so attackers cannot distinguish foreign-tenant from missing.
+      const tid = await tenantId();
+      const before = await prisma[model].findFirst({ where: { id, tenantId: tid } });
+      if (!before) {
+        auditLog(model + '.update.tenant-blocked', model, id, null, { requestedTenantId: tid });
+        return { success: false, errors: { _global: 'Record not found.' } };
+      }
       const row = await prisma[model].update({ where: { id }, data });
       auditLog(model + '.update', model, row.id, before, row);
       return { success: true, data: row };
@@ -404,8 +422,20 @@ for (const { slug, model, name } of CRUD_SLUGS) {
   // delete<Name>(id) → { success } | { success: false, errors }
   crudExports['delete' + Name] = async function(id) {
     try {
-      // Fetch existing row for audit trail before deleting
-      const before = await prisma[model].findUnique({ where: { id } });
+      // Fetch existing row for audit trail before deleting, scoped to
+      // this tenant so a write-capable role cannot delete a foreign
+      // tenant's row by guessing the cuid. Same findFirst pattern as
+      // update<Name> above (Prisma's `delete` only accepts
+      // WhereUniqueInput which is { id } here).
+      //
+      // Same audit-log treatment as update<Name>: a '*.tenant-blocked'
+      // row gets written so the probing attempt is visible in /audit-log.
+      const tid = await tenantId();
+      const before = await prisma[model].findFirst({ where: { id, tenantId: tid } });
+      if (!before) {
+        auditLog(model + '.delete.tenant-blocked', model, id, null, { requestedTenantId: tid });
+        return { success: false, errors: { _global: 'Record not found.' } };
+      }
       await prisma[model].delete({ where: { id } });
       auditLog(model + '.delete', model, id, before, null);
       return { success: true };
@@ -675,14 +705,29 @@ async function createRole(input) {
     }
     throw err;
   }
-}
-
-async function updateRole(id, input) {
-  const existing = await prisma.role.findUnique({ where: { id } });
-  if (!existing) return { success: false, errors: { _global: 'Role not found.' } };
-  // Builtins: name is NOT mutable (so the hardcoded PERMISSIONS const in
-  // server.js can keep its IT_MANAGER/IT_SUPPORT/DEPARTMENT_HEAD/EMPLOYEE
-  // keys stable across the system). Description is always editable.
+}async function updateRole(id, input) {
+    // SECURITY: tenant-scoped findFirst (NOT findUnique) so a write-
+    // capable role in one tenant cannot mutate a foreign tenant's role
+    // by guessing the cuid. Built-in global roles (tenantId=NULL) are
+    // excluded by the tenantId predicate - they remain unreachable from
+    // tenant-side code paths by virtue of filtering out, not by the
+    // downstream isBuiltin branch. The isBuiltin branch below still
+    // runs for any tenant-scoped builtin (tenantId != NULL, isBuiltin=true)
+    // and continues to block name mutation.
+    //
+    // On a tenant-block we also write a 'role.update.tenant-blocked'
+    // audit row so the probing attempt is visible in /audit-log; the
+    // user-facing error stays identical to "Role not found" so an
+    // attacker cannot distinguish foreign-tenant from missing.
+    const tid = await tenantId();
+    const existing = await prisma.role.findFirst({ where: { id, tenantId: tid } });
+    if (!existing) {
+        auditLog('role.update.tenant-blocked', 'role', id, null, { requestedTenantId: tid });
+        return { success: false, errors: { _global: 'Role not found.' } };
+    }
+    // Builtins: name is NOT mutable (so the hardcoded PERMISSIONS const in
+    // server.js can keep its IT_MANAGER/IT_SUPPORT/DEPARTMENT_HEAD/EMPLOYEE
+    // keys stable across the system). Description is always editable.
   const errors = {};
   let name = existing.name;
   if (!existing.isBuiltin) {
@@ -726,13 +771,24 @@ async function updateRole(id, input) {
     }
     throw err;
   }
-}
-
-async function deleteRole(id) {
-  const existing = await prisma.role.findUnique({ where: { id } });
-  if (!existing) return { success: false, errors: { _global: 'Role not found.' } };
-  if (existing.isBuiltin) {
-    return { success: false, errors: { _global: 'Cannot delete a built-in role. Contact a system administrator if removal is required.' } };
+}async function deleteRole(id) {
+    // SECURITY: tenant-scoped findFirst (NOT findUnique) so a write-
+    // capable role in one tenant cannot delete a foreign tenant's role
+    // by guessing the cuid. Built-in global roles (tenantId=NULL) are
+    // excluded by the predicate - same shape as updateRole above.
+    //
+    // On a tenant-block we also write a 'role.delete.tenant-blocked'
+    // audit row so the probing attempt is visible in /audit-log; the
+    // user-facing error stays identical to "Role not found" so an
+    // attacker cannot distinguish foreign-tenant from missing.
+    const tid = await tenantId();
+    const existing = await prisma.role.findFirst({ where: { id, tenantId: tid } });
+    if (!existing) {
+        auditLog('role.delete.tenant-blocked', 'role', id, null, { requestedTenantId: tid });
+        return { success: false, errors: { _global: 'Role not found.' } };
+    }
+    if (existing.isBuiltin) {
+        return { success: false, errors: { _global: 'Cannot delete a built-in role. Contact a system administrator if removal is required.' } };
   }
   try {
     // onDelete: Restrict on User.roleId means deleting a role that still
