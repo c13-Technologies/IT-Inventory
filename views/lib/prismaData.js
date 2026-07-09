@@ -13,6 +13,12 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 const schemas = require('./schemas');
+// Single source of truth for the role form's checkbox taxonomy.
+// Imported with rename so the rest of this file (and the views that
+// read prismaData.PERMISSION_GROUPS) keeps its existing API surface.
+// To add a new namespace: append to GROUPS in views/lib/permissions.js
+// + add the matching code(s) to CODES in the same module.
+const { GROUPS: PERMISSION_GROUPS } = require('./permissions');
 
 // ---------------------------------------------------------------------------
 // Tenant resolution — from Express session (set at login). Falls back to
@@ -633,24 +639,10 @@ async function getWebhooks() {
 //   3. The form UI uses a grouped permissions picker (not crud-form.ejs).
 // ===========================================================================
 
-// Permission namespace catalog — drives the role form layout AND documents
-// the canonical 13 permission codes the system ships with. Mirrors the
-// namespaces in server.js's LEGACY_BUILTIN_PERMISSIONS const + the
-// 13 codes in prisma/seed.js's PERMISSION_CODES. If you add a new
-// namespace here, add a matching entry in seed.js PERMISSION_CODES
-// (so the Permission row gets created) AND in the matching builtin
-// role's BUILTIN_PERMISSIONS array (so the role_permissions junction
-// row gets linked) AND in LEGACY_BUILTIN_PERMISSIONS in server.js
-// (so the fallback for pre-migration sessions still works).
-const PERMISSION_GROUPS = [
-  { namespace: 'assets',         label: 'Assets',         description: 'Hardware, software, accessories — view and modify records.' },
-  { namespace: 'lifecycle',      label: 'Lifecycle',      description: 'Assignments, maintenance, approvals, warranty.' },
-  { namespace: 'directory',      label: 'Directory',      description: 'Users, vendors, locations, categories, departments.' },
-  { namespace: 'inventory',      label: 'Inventory',      description: 'Software licenses and seat allocation.' },
-  { namespace: 'admin',          label: 'Admin',          description: 'Roles, audit log, reports.' },
-  { namespace: 'communications', label: 'Communications', description: 'Notifications and webhook subscriptions.' },
-  { namespace: 'dashboard',      label: 'Dashboard',      description: 'Read-only access to tenant-aggregate dashboard metrics (total assets, users, vendors, status counts, 7-day trends, recent activity).' },
-];
+// Permission namespace catalog — driven by views/lib/permissions.js
+// (imported above as `const { GROUPS: PERMISSION_GROUPS } = ...`).
+// Keeping the alias here means the rest of this file and the views
+// that read prismaData.PERMISSION_GROUPS keep their existing API.
 
 async function getPermissions() {
   return prisma.permission.findMany({ orderBy: { code: 'asc' } });

@@ -8,77 +8,19 @@
 
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcrypt');
+// Single source of truth for the 13 permission codes + the 5 builtins'
+// permission sets. server.js + prismaData.js import from the same
+// module so the seed, the runtime fallback, and the role form's
+// checkbox taxonomy can never diverge. To add a new permission: append
+// to CODES, add a matching group entry to GROUPS, and (optionally) add
+// the code to one or more BUILTINS role arrays.
+const { CODES, BUILTINS } = require('../views/lib/permissions');
 
 const prisma = new PrismaClient();
 
 // Bcrypt password hash for seed users (all share the same password: "password123")
 const DEFAULT_PASSWORD = 'password123';
 let DEFAULT_PASSWORD_HASH = null; // set in main() after bcrypt is ready
-
-// 13 canonical permission codes — mirror of server.js's PERMISSIONS /
-// LEGACY_BUILTIN_PERMISSIONS const. Drives the Permission rows the seed
-// upserts and the RolePermission junction rows it creates for each
-// builtin role. If you add a new code here, also add it to the matching
-// builtin role's array in BUILTIN_PERMISSIONS below AND to the
-// PERMISSION_GROUPS taxonomy in views/lib/prismaData.js (so the role
-// form's checkbox group renders for it).
-const PERMISSION_CODES = [
-  'assets:read', 'assets:write',
-  'lifecycle:read', 'lifecycle:write',
-  'directory:read', 'directory:write',
-  'inventory:read', 'inventory:write',
-  'admin:read', 'admin:write',
-  'communications:read', 'communications:write',
-  'dashboard:read',
-];
-
-// 5 builtin role -> permission map. Mirrors server.js's
-// LEGACY_BUILTIN_PERMISSIONS (which is the fallback for old sessions
-// that pre-date the DB-driven migration). The seed writes the same set
-// into the role_permissions junction table so the DB-driven can(perm)
-// middleware (which reads req.session.userPermissions preloaded at
-// login) gates correctly for the 5 builtins without a per-route lookup.
-// Custom roles created via /roles/new also end up in this junction
-// table; the per-role permission set is what gates them.
-const BUILTIN_PERMISSIONS = {
-  'IT Manager': [
-    'assets:read', 'assets:write',
-    'lifecycle:read', 'lifecycle:write',
-    'directory:read', 'directory:write',
-    'inventory:read', 'inventory:write',
-    'dashboard:read',
-    'admin:read', 'admin:write',
-    'communications:read', 'communications:write',
-  ],
-  'IT Support': [
-    'assets:read', 'assets:write',
-    'lifecycle:read', 'lifecycle:write',
-    'directory:read',
-    'inventory:read',
-    'dashboard:read',
-    'admin:read',
-    'communications:read',
-  ],
-  'Department Head': [
-    'assets:read',
-    'lifecycle:read',
-    'lifecycle:write',  // promoted so DEPT_HEAD can approve asset requests
-    'directory:read',
-  ],
-  'Employee': [
-    'assets:read',
-    'lifecycle:read',
-  ],
-  'Auditor': [
-    'assets:read',
-    'lifecycle:read',
-    'directory:read',
-    'inventory:read',
-    'admin:read',
-    'communications:read',
-    'dashboard:read',
-  ],
-};
 
 async function cleanSlate() {
   // Delete in reverse-dependency order to respect FK constraints
@@ -121,7 +63,7 @@ async function main() {
   // and doesn't break existing RolePermission FKs. The id is stable
   // across re-seeds.
   const permsByCode = {};
-  for (const code of PERMISSION_CODES) {
+  for (const code of CODES) {
     const p = await prisma.permission.upsert({
       where:  { code },
       update: { description: `Permission: ${code}` },
@@ -129,7 +71,7 @@ async function main() {
     });
     permsByCode[code] = p;
   }
-  console.log(`  ✓ Permissions: ${PERMISSION_CODES.length}`);
+  console.log(`  ✓ Permissions: ${CODES.length}`);
 
   // ── 2. Roles ───────────────────────────────────────────────────
   const roleData = [
@@ -154,7 +96,7 @@ async function main() {
     // (silent lockout for every user). createMany is safe here because
     // cleanSlate() just deleted all the old junction rows via
     // prisma.role.deleteMany.
-    const codes = BUILTIN_PERMISSIONS[r.name] || [];
+    const codes = BUILTINS[r.name] || [];
     if (codes.length) {
       await prisma.rolePermission.createMany({
         data: codes.map(code => ({ roleId: role.id, permissionId: permsByCode[code].id })),
