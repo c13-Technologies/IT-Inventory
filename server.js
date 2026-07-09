@@ -82,16 +82,37 @@ app.use((req, _res, next) => {
 // Authentication routes — login, logout
 // ----------------------------------------------------------------------
 
-// GET /login — show login form
+// GET /login — show login form (informational: if currently locked, render
+// the 'too many attempts' banner so a refresh shows the user their status)
 app.get('/login', (req, res) => {
   if (req.session.userId) return res.redirect('/');
-  res.render('pages/auth-login', { title: 'Login', error: null, message: null });
+  const guard = loginGuard.check(req.ip);
+  res.render('pages/auth-login', {
+    title:       'Login',
+    error:       null,
+    message:     null,
+    lockedUntil: guard.allowed ? null : guard.endsAt.toISOString(),
+  });
 });
 
-// POST /login — authenticate user
+// POST /login — authenticate user (with IP-keyed rate-limit + hard lockout)
 app.post('/login', async (req, res) => {
+  // Pre-flight: don't even touch the DB or bcrypt if this IP is locked.
+  // 429 means "real reject" so monitoring tools and clients can distinguish
+  // it from generic 401s.
+  const guard = loginGuard.check(req.ip);
+  if (!guard.allowed) {
+    return res.status(429).render('pages/auth-login', {
+      title:       'Login',
+      error:       null,
+      message:     null,
+      lockedUntil: guard.endsAt.toISOString(),
+    });
+  }
   const { email, password } = req.body || {};
   if (!email || !password) {
+    // Missing-field attempts don't count as failed credentials — user
+    // shouldn't be locked out for an HTML typo.
     return res.status(400).render('pages/auth-login', { title: 'Login', error: 'Email and password are required.', message: null });
   }
   try {
@@ -101,11 +122,12 @@ app.post('/login', async (req, res) => {
       where: { email },
       include: { tenant: true, role: true },
     });
-    if (!user) {
-      return res.status(401).render('pages/auth-login', { title: 'Login', error: 'Invalid email or password.', message: null });
-    }
-    const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
+    // Combined invalid-because-no-user + invalid-because-bad-password path.
+    // Avoids user-enumeration leaks. Either outcome counts as ONE failed
+    // attempt against this IP.
+    const valid = user ? await bcrypt.compare(password, user.passwordHash) : false;
+    if (!user || !valid) {
+      loginGuard.recordFail(req.ip);
       return res.status(401).render('pages/auth-login', { title: 'Login', error: 'Invalid email or password.', message: null });
     }
     // Update lastLoginAt — fire-and-forget so it doesn't delay the redirect
@@ -118,6 +140,8 @@ app.post('/login', async (req, res) => {
       req.session.tenantSlug = user.tenant ? user.tenant.slug : null;
       req.session.userName = user.fullName;
       req.session.userRole = user.role ? user.role.name.toUpperCase().replace(/ /g, '_') : null;
+      // Successful login — clear the IP's bucket + counter + any lockout.
+      loginGuard.clearOnSuccess(req.ip);
       res.redirect(redirectTo);
     });
   } catch (err) {
@@ -503,6 +527,7 @@ app.get('/:page.html', (req, res, next) => {
 // with no EJS changes.
 // ----------------------------------------------------------------------
 const prismaData = require('./views/lib/prismaData');
+const loginGuard = require('./views/lib/loginGuard');
 
 app.get('/assets', requireAuth, can('assets:read'), async (req, res) => {
   const result = await prismaData.getAssets({
@@ -1321,12 +1346,40 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
 //      IBM Plex Sans WOFF2. Anything else falls through to the 404.
 // ----------------------------------------------------------------------
 
-// Defense-in-depth denylist. The mounts below already exclude these paths,
-// but an explicit regex stops a future maintainer from re-exposing source
-// / secrets by mistake.
-const STATIC_DENYLIST = /^\/(?:prisma|views|scripts|server\.js|package\.json|package-lock\.json|\.env|tmp|ref)(?:\/.*)?$/i;
+// Defense-in-depth denylist — two layers:
+//   1. STATIC_PATH_DENYLIST matches /<block> or /<block>/... for sensitive
+//      top-level directories and files. Each variant is spelled out so
+//      near-miss names (e.g. `/.envguide` or `/prismajsconfig`) are NOT
+//      flagged by the regex.
+//   2. STATIC_EXT_DENYLIST matches a filename ending in .log / .bak / .swp /
+//      .DS_Store (with optional ?<query> for cache-busting clients).
+//
+// The mounts below already exclude these, but if a future maintainer
+// re-adds `app.use(express.static(ROOT_DIR, ...))` we still don't leak
+// source code / seed credentials / IDE config / env files / runtime logs.
+// Path-prefix denylist. `\.env(?:\.[a-z][a-z0-9_-]*)?` accepts any future
+// `.env.<lowercase-segment>` (e.g. `.env.staging`, `.env.qa`) without an
+// edit here, AND does NOT match `.envguide`/`.envnotes` (no dot before
+// the trailing word). Root-level git hygiene files (.gitattributes,
+// .gitmodules, .dockerignore) live OUTSIDE .git/ so they need explicit
+// alts; without them they would be served.
+// Defense-in-depth PATH denylist. Each att is either:
+//   - a literal top-level directory / file                     (e.g. prisma, server.js)
+//   - a dotted git ignore / syntax file                        (e.g. .gitignore, .envrc)
+//   - a top-level infrastructure file                          (e.g. Dockerfile, docker-compose)
+//   - one with an OPTIONAL dotted-variant suffix               ((?:\.[\w]+)? / (?:\.[\w][\w.-]*)?)
+//
+// Tightened env matcher `\.env(?:\.[\w][\w.-]*)?` (was `\.env(?:\.[a-z][a-z0-9_-]*)?`):
+//   - DENIES: /.env, /.env.local, /.env.production.local,
+//             /.env.development.local, /.env.staging.local, /.env.<stage>.<scope>
+//   - ALLOWS: /.envguide, /.envtest, /.envnotes, /.envguide/sub  (no dot after .env)
+//
+// Variant suffixes use `[\w.-]+` so multi-dot filenames like
+// `Dockerfile.prod.local` are still denied.
+const STATIC_PATH_DENYLIST = /^\/(?:prisma|views|scripts|server\.js|package\.json|package-lock\.json|\.env(?:\.[\w][\w.-]*)?|\.envrc|\.git|\.gitignore|\.gitattributes|\.gitmodules|\.gitconfig|\.dockerignore|Dockerfile(?:\.[\w.-]+)?|docker-compose(?:\.[\w.-]+)?|Makefile|\.editorconfig|\.babelrc(?:\.[\w.-]+)?|\.eslintrc(?:\.[\w.-]+)?|\.eslintignore|\.prettierrc(?:\.[\w.-]+)?|\.browserslistrc|\.stylelintrc(?:\.[\w.-]+)?|tsconfig\.json|\.github|\.vscode|\.npm|\.npmrc|\.nvmrc|\.idea|\.vercel|tmp|ref)(?:\/.*)?$/i;
+const STATIC_EXT_DENYLIST = /\.(?:log|bak|swp|DS_Store)(?:$|\?)/i;
 app.use((req, res, next) => {
-  if (STATIC_DENYLIST.test(req.path)) {
+  if (STATIC_PATH_DENYLIST.test(req.path) || STATIC_EXT_DENYLIST.test(req.path)) {
     // Return a plain 404 (not 403) so unauthenticated probing doesn't
     // confirm the URL exists.
     return res.status(404).end();

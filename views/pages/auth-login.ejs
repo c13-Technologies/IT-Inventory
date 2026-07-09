@@ -20,6 +20,12 @@
                                         <p class="text-muted mt-2">Sign in to IT Inventory.</p>
                                     </div>
 
+                                    <% var _isLocked = (typeof lockedUntil !== 'undefined' && lockedUntil); %>
+                                    <% if (_isLocked) { %>
+                                        <div class="alert alert-warning alert-dismissible fade show mt-3" role="alert" data-locked-until="<%= lockedUntil %>" data-locked-seconds="<%= Math.max(0, Math.ceil((new Date(lockedUntil).getTime() - Date.now()) / 1000)) %>">
+                                            <i class="bx bx-time-five me-1"></i><strong>Too many login attempts.</strong> To protect your account, sign-in is paused. You can try again in <span class="locked-countdown">--:--</span>.
+                                        </div>
+                                    <% } %>
                                     <% if (typeof error !== 'undefined' && error) { %>
                                         <div class="alert alert-danger alert-dismissible fade show mt-3" role="alert">
                                             <i class="bx bx-error-circle me-1"></i><%= error %>
@@ -36,7 +42,7 @@
                                     <form class="mt-4 pt-2" method="POST" action="/login">
                                         <div class="mb-3">
                                             <label for="email" class="form-label">Email</label>
-                                            <input type="email" class="form-control" id="email" name="email" placeholder="you@company.com" required autofocus>
+                                            <input type="email" class="form-control" id="email" name="email" placeholder="you@company.com" required autofocus <%= _isLocked ? 'disabled' : '' %>>
                                         </div>
                                         <div class="mb-3">
                                             <div class="d-flex align-items-start">
@@ -49,20 +55,25 @@
                                             </div>
 
                                             <div class="input-group auth-pass-inputgroup">
-                                                <input type="password" class="form-control" id="password" name="password" placeholder="Enter password" aria-label="Password" aria-describedby="password-addon" required>
-                                                <button class="btn btn-light shadow-none ms-0" type="button" id="password-addon"><i class="mdi mdi-eye-outline"></i></button>
+                                                <input type="password" class="form-control" id="password" name="password" placeholder="Enter password" aria-label="Password" aria-describedby="password-addon" required <%= _isLocked ? 'disabled' : '' %>>
+                                                <button class="btn btn-light shadow-none ms-0" type="button" id="password-addon" <%= _isLocked ? 'disabled' : '' %>><i class="mdi mdi-eye-outline"></i></button>
                                             </div>
                                         </div>
+                                        <% if (_isLocked) { %>
+                                            <input type="hidden" name="_locked" value="1">
+                                        <% } %>
                                         <div class="row mb-4">
                                             <div class="col">
                                                 <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="remember-check">
+                                                    <input class="form-check-input" type="checkbox" id="remember-check" <%= _isLocked ? 'disabled' : '' %>>
                                                     <label class="form-check-label" for="remember-check">Remember me</label>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="mb-3">
-                                            <button class="btn btn-primary w-100 waves-effect waves-light" type="submit">Sign In</button>
+                                            <button class="btn btn-primary w-100 waves-effect waves-light" type="submit" <%= _isLocked ? 'disabled' : '' %>>
+                                                <% if (_isLocked) { %><i class="bx bx-lock me-1"></i>Sign-in paused<% } else { %>Sign In<% } %>
+                                            </button>
                                         </div>
                                     </form>
 
@@ -184,6 +195,30 @@
     <%- include('../partials/scripts-auth') %>
     <!-- password show/hide toggle -->
     <script src="assets/js/pages/pass-addon.init.js"></script>
+
+    <!-- Lockout countdown: 1Hz tick on the warning banner; reloads the page once the wait elapses so the user can try again. -->
+    <script>
+    (function () {
+      var el = document.querySelector('[data-locked-until]');
+      if (!el) return;
+      var target = new Date(el.dataset.lockedUntil).getTime();
+      var span = el.querySelector('.locked-countdown');
+      function pad(n) { return n < 10 ? '0' + n : '' + n; }
+      function tick() {
+        var ms = target - Date.now();
+        if (ms <= 0) { location.reload(); return; }
+        var m = Math.floor(ms / 60000);
+        var s = Math.floor((ms % 60000) / 1000);
+        span.textContent = pad(m) + ':' + pad(s);
+        setTimeout(tick, 1000);
+      }
+      tick();
+      // Defensive: if the page stays open across the boundary without a
+      // reload (e.g. user backgrounds the tab), still nudge a refresh a few
+      // seconds after expiry.
+      setTimeout(function () { location.reload(); }, Math.max(0, target - Date.now()) + 5000);
+    })();
+    </script>
 
 </body>
 </html>
