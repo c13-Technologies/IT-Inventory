@@ -198,11 +198,24 @@ const PERMISSIONS = {
   DEPARTMENT_HEAD: [
     'assets:read',
     'lifecycle:read',
+    'lifecycle:write',  // promoted so DEPT_HEAD can approve asset requests
     'directory:read',
   ],
   EMPLOYEE: [
     'assets:read',
     'lifecycle:read',
+  ],
+  AUDITOR: [
+    // Read-only across the full surface for compliance / audit checks.
+    // No :write perms on any namespace -- intentionally cannot mutate
+    // any entity. The role's purpose is to inspect /audit-log,
+    // /reports, /warranty, /license-seats etc. without side effects.
+    'assets:read',
+    'lifecycle:read',
+    'directory:read',
+    'inventory:read',
+    'admin:read',
+    'communications:read',
   ],
 };
 

@@ -57,6 +57,7 @@ async function main() {
     { name: 'IT Support',       description: 'Can view and manage assets, assignments, and maintenance' },
     { name: 'Department Head',   description: 'Can view and approve requests for their department' },
     { name: 'Employee',          description: 'Can view assigned assets and submit requests' },
+    { name: 'Auditor',           description: 'Read-only access to all entities for compliance and audit checks' },
   ];
   const roles = {};
   for (const r of roleData) {
