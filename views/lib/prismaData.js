@@ -428,6 +428,18 @@ for (const { slug, model, name } of CRUD_SLUGS) {
           where: { id: row.id },
           data: { permVersion: { increment: 1 } },
         });
+        // PERM-BUMPS: write a dedicated audit row with action
+        // 'user.role-change' so the /perm-bumps page can render
+        // "admin X moved user Y from role A to role B" without
+        // having to post-filter the generic 'user.update' stream
+        // for roleId diffs. invalidatedCount is hard-coded to 1
+        // (only the affected user's session is invalidated). The
+        // audit log also records the admin's userId (from the
+        // request session via the auditLog() helper below) as the
+        // 'who triggered it' field.
+        auditLog('user.role-change', 'user', row.id,
+          { roleId: before.roleId },
+          { roleId: row.roleId, permVersion: row.permVersion + 1, invalidatedCount: 1, affectedUserId: row.id, affectedUserName: row.fullName, affectedUserEmail: row.email });
       }
       auditLog(model + '.update', model, row.id, before, row);
       return { success: true, data: row };
@@ -624,6 +636,73 @@ async function getAuditLogs() {
   }));
 }
 
+// Perm-bumps feed for /perm-bumps page. Returns the most recent
+// session-invalidation events (role.update + user.role-change) so
+// admins can answer "who got logged out at 14:32 when the Auditor
+// role was edited?" Two event types:
+//
+//   1. action = 'role.update' with after.invalidatedCount > 0
+//      (written by prismaData.updateRole when a role's perm set
+//      changes — invalidates N users where N = users currently
+//      mapped to the role at edit time)
+//
+//   2. action = 'user.role-change'
+//      (written by the auto-CRUD updateUser hook when an admin
+//      moves a single user to a different role — invalidates 1
+//      user: the one being moved)
+//
+// Excludes role.update events with invalidatedCount = 0 (e.g. a
+// builtin with no users, or a brand-new custom role before any
+// users are assigned) since those don't represent an actual
+// session-invalidation event.
+//
+// We over-fetch by 3x and post-filter in JS because Prisma's
+// JSON-path "gt: 0" filter on after->invalidatedCount is awkward
+// to express and not worth the complexity for the expected low
+// volume of role.update events. (If perm-bumps ever becomes a
+// high-traffic page, swap to a SQL raw query with jsonb_path_ops.)
+async function getPermBumps({ limit = 50 } = {}) {
+  const tid = await tenantId();
+  const rows = await prisma.auditLog.findMany({
+    where: {
+      tenantId: tid,
+      action: { in: ['role.update', 'user.role-change'] },
+    },
+    include: { user: true },
+    orderBy: { createdAt: 'desc' },
+    take: limit * 3,
+  });
+  return rows
+    .filter(r => {
+      if (r.action === 'user.role-change') return true;
+      // role.update — only show if at least 1 user was invalidated
+      return r.after && (r.after.invalidatedCount || 0) > 0;
+    })
+    .slice(0, limit)
+    .map(r => ({
+      id:            r.id,
+      createdAt:     r.createdAt,
+      action:        r.action,
+      entityType:    r.entityType,
+      entityId:      r.entityId,
+      // Admin who triggered the change (the user in the audit row
+      // is the session userId = the admin doing the edit). For
+      // user.role-change rows, the affected user is in after.affectedUser*.
+      triggeredByName:  r.user ? r.user.fullName : 'System',
+      triggeredByEmail: r.user ? r.user.email : null,
+      // After JSON: role.update has { invalidatedCount, roleName };
+      // user.role-change has { invalidatedCount, affectedUserId,
+      // affectedUserName, affectedUserEmail, roleId (new) }.
+      invalidatedCount: (r.after && r.after.invalidatedCount) || 0,
+      roleName:         r.after ? r.after.roleName : null,
+      affectedUserId:       r.after ? r.after.affectedUserId : null,
+      affectedUserName:     r.after ? r.after.affectedUserName : null,
+      affectedUserEmail:    r.after ? r.after.affectedUserEmail : null,
+      oldRoleId:            (r.action === 'user.role-change' && r.before) ? r.before.roleId : null,
+      newRoleId:            (r.action === 'user.role-change' && r.after)  ? r.after.roleId  : null,
+    }));
+}
+
 // Notifications
 async function getNotifications() {
   const tid = await tenantId();
@@ -807,10 +886,20 @@ async function createRole(input) {
         where: { id },
         include: { rolePermissions: { include: { permission: true } } },
       });
-      return { role: fresh, permVersion: newPermVersion };
+      // Surface invalidatedCount + role name in the tx return so the
+      // outer caller (and the audit log write below) know how many
+      // users were bumped and which role was affected. Used by the
+      // /perm-bumps page to render the "role edit invalidated N
+      // users" row.
+      return { role: fresh, permVersion: newPermVersion, invalidatedCount: usersInRole.length, roleName: fresh.name };
     });
-    auditLog('role.update', 'role', id, existing, updated.role);
-    return { success: true, data: updated.role, permVersion: updated.permVersion };
+    // PERM-BUMPS: the invalidatedCount + role name in the after JSON
+    // is what /perm-bumps queries to render its rows. We pass a
+    // spread of the role + 2 extra fields; the auditLog helper
+    // stores the whole object as JSONB so the extra fields are
+    // queryable via Prisma's JSON path filters (see getPermBumps).
+    auditLog('role.update', 'role', id, existing, { ...updated.role, invalidatedCount: updated.invalidatedCount, roleName: updated.roleName });
+    return { success: true, data: updated.role, permVersion: updated.permVersion, invalidatedCount: updated.invalidatedCount };
   } catch (err) {
     if (err.code === 'P2002') {
       return { success: false, errors: { _global: 'A role with this name already exists in this tenant.' } };
@@ -892,6 +981,7 @@ module.exports = Object.assign({}, crudExports, {
   getWarranties,
   getRoles,
   getAuditLogs,
+  getPermBumps,
   getReports,
   getNotifications,
   getWebhooks,

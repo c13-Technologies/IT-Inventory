@@ -1174,6 +1174,21 @@ app.get('/audit-log', requireAuth, can('admin:read'), async (req, res) => {
   });
 });
 
+// /perm-bumps — session-invalidation feed. Lists the most recent
+// role.update + user.role-change events from the audit log so admins
+// can answer "who got logged out at 14:32 when the Auditor role was
+// edited?" and "which user got moved to a new role?". Backed by
+// prismaData.getPermBumps (filters the audit stream to the two
+// actions written by updateRole + the auto-CRUD updateUser hook).
+app.get('/perm-bumps', requireAuth, can('admin:read'), async (req, res) => {
+  const rows = await prismaData.getPermBumps();
+  res.render('pages/perm-bumps/index', {
+    title: TITLES['perm-bumps'] || 'Permission Bumps',
+    slug:  'perm-bumps',
+    rows,
+  });
+});
+
 app.get('/reports', requireAuth, can('admin:read'), async (req, res) => {
   let rows = prismaData.getReports();
   const search = req.query.search || '';

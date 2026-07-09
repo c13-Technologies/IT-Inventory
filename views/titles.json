@@ -17,6 +17,7 @@
   "warranty": "Warranty Tracking",
   "roles": "Roles & Permissions",
   "audit-log": "Audit Log",
+  "perm-bumps": "Permission Bumps",
   "reports": "Reports",
   "notifications": "Notifications",
   "webhooks": "Webhooks"
