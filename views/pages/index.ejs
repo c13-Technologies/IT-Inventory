@@ -25,6 +25,19 @@
                         </div>
                     </div>
 
+                    <!-- Inline-banner shown when /api/dashboard/stats fails.
+                         Hidden by default; dashboard.init.js toggles .d-none based on fetch result. -->
+                    <div id="dashboard-error-banner" class="alert alert-warning d-flex align-items-center d-none mb-3" role="alert">
+                        <i class="mdi mdi-alert-circle-outline me-2 font-size-20"></i>
+                        <div class="flex-grow-1">
+                            <strong>Dashboard data couldn't be loaded.</strong>
+                            <div class="font-size-12 text-muted" id="dashboard-error-detail">Some metrics may be unavailable.</div>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-soft-primary" id="dashboard-retry-btn">
+                            <i class="mdi mdi-refresh me-1"></i> Retry
+                        </button>
+                    </div>
+
                     <div class="row">
                         <div class="col-xl-3 col-md-6">
                             <div class="card card-h-100">
