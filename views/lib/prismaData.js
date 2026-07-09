@@ -412,6 +412,22 @@ for (const { slug, model, name } of CRUD_SLUGS) {
         return { success: false, errors: { _global: 'Record not found.' } };
       }
       const row = await prisma[model].update({ where: { id }, data });
+      // users-specific post-update hook: if the user's roleId changed,
+      // bump their permVersion so the per-session requireFreshPerms
+      // middleware forces them to re-login with the new perm set on
+      // their next request. Without this, an admin who re-routes a
+      // user to a different role would be silently working with the
+      // stale perm array preloaded at the user's last login. The
+      // before.roleId !== row.roleId guard skips the no-op case where
+      // the form re-submits the same role (Prisma's update() still
+      // bumps updatedAt on a no-op write, so a naive "data.roleId is
+      // set" check would cause false-positive re-logins).
+      if (slug === 'users' && data.roleId && before.roleId !== row.roleId) {
+        await prisma.user.update({
+          where: { id: row.id },
+          data: { permVersion: { increment: 1 } },
+        });
+      }
       auditLog(model + '.update', model, row.id, before, row);
       return { success: true, data: row };
     } catch (err) {
@@ -756,13 +772,40 @@ async function createRole(input) {
           data: perms.map(p => ({ roleId: id, permissionId: p.id })),
         });
       }
-      return await tx.role.findUnique({
+      // SESSION-INVALIDATION: bump permVersion for every user currently
+      // mapped to this role. This is the trigger for the
+      // requireFreshPerms middleware in server.js to destroy the user's
+      // session on their next request and force a re-login with the
+      // new perm set. Done INSIDE the transaction so the role update,
+      // the junction-table rewrite, and the permVersion bump are
+      // atomic — a crash mid-flight can't leave the role updated
+      // while users keep stale sessions (or vice versa). The fetch
+      // before the increment lets us capture the new value to return
+      // to the caller (the route handler) for logging / debugging.
+      // Race condition with two concurrent role edits is benign: both
+      // incrementers produce a permVersion distinct from any pre-edit
+      // value, so any in-flight session gets invalidated exactly once.
+      const usersInRole = await tx.user.findMany({
+        where: { roleId: id },
+        select: { permVersion: true },
+      });
+      const newPermVersion = usersInRole.length
+        ? Math.max(...usersInRole.map(u => u.permVersion)) + 1
+        : 1;
+      if (usersInRole.length) {
+        await tx.user.updateMany({
+          where: { roleId: id },
+          data: { permVersion: newPermVersion },
+        });
+      }
+      const fresh = await tx.role.findUnique({
         where: { id },
         include: { rolePermissions: { include: { permission: true } } },
       });
+      return { role: fresh, permVersion: newPermVersion };
     });
-    auditLog('role.update', 'role', id, existing, updated);
-    return { success: true, data: updated };
+    auditLog('role.update', 'role', id, existing, updated.role);
+    return { success: true, data: updated.role, permVersion: updated.permVersion };
   } catch (err) {
     if (err.code === 'P2002') {
       return { success: false, errors: { _global: 'A role with this name already exists in this tenant.' } };

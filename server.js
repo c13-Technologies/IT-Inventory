@@ -91,13 +91,19 @@ app.use((req, _res, next) => {
 
 // GET /login — show login form (informational: if currently locked, render
 // the 'too many attempts' banner so a refresh shows the user their status)
+// Also surfaces the `?flash=perms` query param set by requireFreshPerms
+// when a session was destroyed due to a role/perm change.
 app.get('/login', (req, res) => {
   if (req.session.userId) return res.redirect('/');
   const guard = loginGuard.check(req.ip);
+  let message = null;
+  if (req.query.flash === 'perms') {
+    message = 'Your permissions have been updated. Please sign in again to continue with your new access level.';
+  }
   res.render('pages/auth-login', {
     title:       'Login',
     error:       null,
-    message:     null,
+    message:     message,
     lockedUntil: guard.allowed ? null : guard.endsAt.toISOString(),
   });
 });
@@ -161,6 +167,11 @@ app.post('/login', async (req, res) => {
       req.session.userPermissions = user.role && user.role.rolePermissions
         ? user.role.rolePermissions.map(rp => rp.permission.code)
         : [];
+      // SESSION-INVALIDATION: seed permVersion so requireFreshPerms
+      // can detect future perm changes. For users without a role
+      // (no permVersion column fallback needed — Prisma returns 0
+      // from the @default(0) for any user row).
+      req.session.permVersion = (user.permVersion != null) ? user.permVersion : 0;
       // Successful login — clear the IP's bucket + counter + any lockout.
       loginGuard.clearOnSuccess(req.ip);
       res.redirect(redirectTo);
@@ -184,6 +195,57 @@ function requireAuth(req, res, next) {
   if (req.session && req.session.userId) return next();
   req.session.returnTo = req.originalUrl;
   res.redirect('/login');
+}
+
+// SESSION-INVALIDATION: per-request freshness check. Reads the DB's
+// User.permVersion and compares to the value stored in the session at
+// login. If the DB value is greater (the user's role perms changed
+// or they were moved to a different role), destroy the session and
+// redirect to /login with a flash message so the user re-logs-in
+// with the new perm set. Pre-migration sessions (where
+// req.session.permVersion is undefined) are treated as a mismatch
+// and force re-login — the next login seeds the session with the
+// correct value. This adds one indexed findUnique per authed
+// request; on the existing schema the cost is sub-millisecond
+// (single-column lookup on a @id index). If the DB is down, fail
+// OPEN with a console warning so the app stays available (better
+// degraded-mode UX than a 500 for every request).
+async function requireFreshPerms(req, res, next) {
+  if (!req.session.userId) return next();
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.session.userId },
+      select: { permVersion: true, tenantId: true, status: true },
+    });
+    if (!user) {
+      // User was deleted out from under their session.
+      return req.session.destroy(() => res.redirect('/login?flash=perms'));
+    }
+    // SECURITY (defense-in-depth): tenant-scoped check. The session
+    // tenantId was set at login and shouldn't drift, but if it does
+    // we want to force re-login rather than serve a foreign tenant's
+    // perm version.
+    if (user.tenantId !== req.session.tenantId) {
+      return req.session.destroy(() => res.redirect('/login?flash=perms'));
+    }
+    // DISABLED users get logged out too — better to force a re-login
+    // than to leave a zombie session navigating a now-disabled account.
+    if (user.status !== 'ACTIVE') {
+      return req.session.destroy(() => res.redirect('/login?flash=perms'));
+    }
+    const sessionPV = req.session.permVersion;
+    if (typeof sessionPV !== 'number' || sessionPV !== user.permVersion) {
+      // Stale or pre-migration session — destroy and force re-login.
+      return req.session.destroy(() => res.redirect('/login?flash=perms'));
+    }
+    next();
+  } catch (err) {
+    // Fail open: if the DB is down, allow the request through. The
+    // right long-term answer is a circuit breaker or a "session-
+    // locked" banner, but those are out of scope for this commit.
+    console.error('[requireFreshPerms] DB error, allowing request through:', err.message);
+    next();
+  }
 }
 
 // Resolve the effective permission set for the current request. Reads
@@ -300,6 +362,15 @@ app.use((req, _res, next) => {
   next();
 });
 
+// SESSION-INVALIDATION: per-request freshness check. Runs AFTER
+// requireAuth (per-route) so it only fires for authed requests, and
+// BEFORE the route handler / can(perm) so a stale session gets
+// destroyed with a friendly redirect before it 403s on a perm check.
+// Defined as a global middleware (rather than per-route) so a new
+// gated route is automatically protected without needing to remember
+// to add it to the chain.
+app.use(requireFreshPerms);
+
 // Profile page — all authenticated users can see their own profile
 app.get('/profile', requireAuth, async (req, res) => {
   res.render('pages/profile', {
@@ -399,6 +470,12 @@ app.post('/profile/password', requireAuth, async (req, res) => {
     const postChangeUserPerms  = user.role && user.role.rolePermissions
       ? user.role.rolePermissions.map(rp => rp.permission.code)
       : [];
+    // SESSION-INVALIDATION: capture the user's current permVersion
+    // BEFORE regenerate so the fresh session can re-seed it. Without
+    // this, requireFreshPerms would treat the new session as a
+    // mismatch (undefined permVersion) and force ANOTHER re-login
+    // immediately after the password change — a 2-step login loop.
+    const postChangeUserPermVersion = (user.permVersion != null) ? user.permVersion : 0;
     // Hash new password, update, and regenerate session for security
     const hash = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
@@ -409,6 +486,7 @@ app.post('/profile/password', requireAuth, async (req, res) => {
       req.session.userName   = postChangeUserName;
       req.session.userRole   = postChangeUserRole;
       req.session.userPermissions = postChangeUserPerms;
+      req.session.permVersion = postChangeUserPermVersion;
       res.render('pages/profile', {
         title:   'My Profile',
         success: 'Password changed successfully.',

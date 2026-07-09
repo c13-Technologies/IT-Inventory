@@ -281,6 +281,14 @@ model User {
   departmentId String?    @map("department_id")
   status       UserStatus @default(ACTIVE)
   lastLoginAt  DateTime?  @map("last_login_at")
+  // Session-invalidation counter. Bumped whenever the user's role
+  // membership OR the role's permission set changes, so the per-
+  // request requireFreshPerms middleware can detect stale sessions
+  // and force a re-login. Distinct from `version` (which is for
+  // optimistic locking on writes) — `permVersion` is for read-time
+  // cache invalidation only. See views/lib/prismaData.updateRole /
+  // updateUser for the bump sites.
+  permVersion  Int        @default(0) @map("perm_version")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
   version      Int        @default(0)
