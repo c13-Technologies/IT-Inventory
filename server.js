@@ -210,12 +210,20 @@ const PERMISSIONS = {
     // No :write perms on any namespace -- intentionally cannot mutate
     // any entity. The role's purpose is to inspect /audit-log,
     // /reports, /warranty, /license-seats etc. without side effects.
+    // `dashboard:read` grants access to the tenant-aggregate dashboard
+    // (totalAssets / totalUsers / assetsByStatus / etc.) so an Auditor
+    // can sanity-check the org's overall inventory state without
+    // needing to drill into each list page. Without it, GET / silently
+    // redirects to /assets and the Auditor never sees the dashboard
+    // metrics at all (surfaced as a user report: "dashboards don't
+    // display any values, users, assets etc").
     'assets:read',
     'lifecycle:read',
     'directory:read',
     'inventory:read',
     'admin:read',
     'communications:read',
+    'dashboard:read',
   ],
 };
 
@@ -507,7 +515,15 @@ apiRoute('get', 'dashboard', '/trends', 'read', async (_req, res) => {
     const [assetsRaw, usersRaw, assignmentsRaw, vendorsRaw] = await Promise.all([
       prisma.asset.findMany({ where: { tenantId: tid, ...inWindow }, select: { createdAt: true } }),
       prisma.user.findMany({ where: { tenantId: tid, ...inWindow }, select: { createdAt: true } }),
-      prisma.assignment.findMany({ where: { tenantId: tid, ...inWindow }, select: { assignedAt: true } }),
+      // SECURITY/CORRECTNESS: filter assignments by `assignedAt` (the
+      // business-meaningful date) not `createdAt` (the row-creation
+      // date). The shared `inWindow` filter is `createdAt >= from`,
+      // which would silently drop any assignment whose row was created
+      // in the last 7 days but was assigned earlier (and would also
+      // pick up old assignments that just happened to be re-saved).
+      // The sparkline then bucketises by `assignedAt`, so the WHERE
+      // and the GROUP BY must agree on which date they're using.
+      prisma.assignment.findMany({ where: { tenantId: tid, assignedAt: { gte: from } }, select: { assignedAt: true } }),
       prisma.vendor.findMany({ where: { tenantId: tid, ...inWindow }, select: { createdAt: true } }),
     ]);
 
