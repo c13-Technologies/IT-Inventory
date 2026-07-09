@@ -565,7 +565,7 @@ function getReports() {
 // ---------------------------------------------------------------------------
 // Module exports — mirrors mockData.js exactly
 // ---------------------------------------------------------------------------
-module.exports = Object.assign({
+module.exports = Object.assign({}, crudExports, {
   // Tenant / request context
   setRequest,
   // Assets (query)
@@ -599,4 +599,4 @@ module.exports = Object.assign({
     RETIRED:   'RETIRED',
     LOST:      'LOST',
   },
-}, crudExports);
+});
