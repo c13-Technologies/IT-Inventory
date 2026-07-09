@@ -412,16 +412,17 @@ for (const { slug, model, name } of CRUD_SLUGS) {
         return { success: false, errors: { _global: 'Record not found.' } };
       }
       const row = await prisma[model].update({ where: { id }, data });
-      // users-specific post-update hook: if the user's roleId changed,
-      // bump their permVersion so the per-session requireFreshPerms
-      // middleware forces them to re-login with the new perm set on
-      // their next request. Without this, an admin who re-routes a
-      // user to a different role would be silently working with the
-      // stale perm array preloaded at the user's last login. The
-      // before.roleId !== row.roleId guard skips the no-op case where
-      // the form re-submits the same role (Prisma's update() still
-      // bumps updatedAt on a no-op write, so a naive "data.roleId is
-      // set" check would cause false-positive re-logins).
+      // SESSION-INVALIDATION: if the user's roleId changed, bump their
+      // permVersion so the per-session requireFreshPerms middleware
+      // forces them to re-login with the new perm set on their next
+      // request. The before.roleId !== row.roleId guard skips the
+      // no-op case where the form re-submits the same role (Prisma's
+      // update() still bumps updatedAt on a no-op write, so a naive
+      // "data.roleId is set" check would cause false-positive
+      // re-logins). See also updateRole() in the role CRUD block
+      // below for the parallel bump applied to all users in a role
+      // when a role's perms change — a future maintainer adding a
+      // new roleId-mutating slug should follow both call sites.
       if (slug === 'users' && data.roleId && before.roleId !== row.roleId) {
         await prisma.user.update({
           where: { id: row.id },
@@ -782,9 +783,13 @@ async function createRole(input) {
       // while users keep stale sessions (or vice versa). The fetch
       // before the increment lets us capture the new value to return
       // to the caller (the route handler) for logging / debugging.
-      // Race condition with two concurrent role edits is benign: both
-      // incrementers produce a permVersion distinct from any pre-edit
-      // value, so any in-flight session gets invalidated exactly once.
+      // BENIGN RACE: two concurrent updateRole calls against the same
+      // role can both compute the same new permVersion, making the
+      // second updateMany a no-op. End-state is still correct (any
+      // pre-edit permVersion is invalidated exactly once). Locking
+      // would be overkill — the next reader should NOT "fix" this
+      // with a row-level lock; the current behavior is the intended
+      // one.
       const usersInRole = await tx.user.findMany({
         where: { roleId: id },
         select: { permVersion: true },

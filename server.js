@@ -234,15 +234,29 @@ async function requireFreshPerms(req, res, next) {
       return req.session.destroy(() => res.redirect('/login?flash=perms'));
     }
     const sessionPV = req.session.permVersion;
-    if (typeof sessionPV !== 'number' || sessionPV !== user.permVersion) {
+    // Number.isInteger (vs typeof 'number') is more defensive: a
+    // maliciously-set non-integer in the session (e.g. "1") would
+    // pass typeof but fail isInteger. Express-session stores the
+    // session as JSON so client-side tampering isn't possible, but
+    // the defensive check is cheap and clearer in intent.
+    if (!Number.isInteger(sessionPV) || sessionPV !== user.permVersion) {
       // Stale or pre-migration session — destroy and force re-login.
       return req.session.destroy(() => res.redirect('/login?flash=perms'));
     }
     next();
   } catch (err) {
-    // Fail open: if the DB is down, allow the request through. The
-    // right long-term answer is a circuit breaker or a "session-
-    // locked" banner, but those are out of scope for this commit.
+    // Fail-open on DB error: if the DB is down, allow the request
+    // through. The right long-term answer is a circuit breaker or
+    // a "session-locked" banner, but those are out of scope.
+    //
+    // SECURITY NOTE (intentional trade-off): during a DB outage,
+    // users keep their stale userPermissions array — can(perm) still
+    // works against it. They won't get *new* perms, but they also
+    // won't be *denied* perms they should have lost. Acceptable
+    // because (a) the stale window is short (one DB blip), and
+    // (b) the alternative — fail-closed on any DB error — would
+    // mass-evict every user on every transient hiccup, which is
+    // a worse outage than the stale-perm risk it trades away.
     console.error('[requireFreshPerms] DB error, allowing request through:', err.message);
     next();
   }
@@ -369,7 +383,27 @@ app.use((req, _res, next) => {
 // Defined as a global middleware (rather than per-route) so a new
 // gated route is automatically protected without needing to remember
 // to add it to the chain.
-app.use(requireFreshPerms);
+//
+// EFFICIENCY: the middleware itself short-circuits unauthed requests
+// (the `if (!req.session.userId) return next()` inside), so a logged-
+// out user hitting /login or /api/* pays no DB cost. But for an
+// authed user fetching a page that pulls in 30 CSS/JS/woff2 files,
+// the static-asset paths are the hot loop. The wrapper below
+// skips the freshness check for the three static-mount prefixes
+// (matching the `app.use('/assets', ...)` / `app.use('/fonts...')`
+// calls later in this file) so an authed user loading a page
+// doesn't pay N extra DB queries for N static assets. The
+// freshness check is still enforced on every gated route (EJS,
+// API, CRUD, role management, etc.) because those are the only
+// paths where can(perm) actually runs.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/assets/') ||
+      req.path.startsWith('/fonts.googleapis.com/') ||
+      req.path.startsWith('/fonts.gstatic.com/')) {
+    return next();
+  }
+  return requireFreshPerms(req, res, next);
+});
 
 // Profile page — all authenticated users can see their own profile
 app.get('/profile', requireAuth, async (req, res) => {
