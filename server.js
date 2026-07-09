@@ -606,6 +606,15 @@ app.get('/assets/new', requireAuth, can('assets:write'), async (_req, res) => {
 app.get('/assets/:id', requireAuth, can('assets:read'), async (req, res, next) => {
   const asset = await prismaData.getAssetById(req.params.id);
   if (!asset) return next();
+  // SECURITY: roles without 'assets:write' (EMPLOYEE, DEPARTMENT_HEAD)
+  // can only view assets CURRENTLY ASSIGNED to them. Anything else
+  // gets the same 404 as a missing asset (via the final fallback),
+  // so a logged-in low-perm user cannot probe tenant cuids from the
+  // URL to leak vendor / purchase cost / warranty / assignment history.
+  // 404 (not 403) deliberately - 403 would confirm the cuid exists.
+  const allowed = PERMISSIONS[req.session.userRole] || [];
+  const canWriteAssets = allowed.includes('assets:write');
+  if (!canWriteAssets && asset.assignedTo?.id !== req.session.userId) return next();
   res.render('pages/assets/detail', {
     title:       asset.name,
     asset:       asset,
@@ -618,6 +627,14 @@ app.get('/assets/:id', requireAuth, can('assets:read'), async (req, res, next) =
 app.get('/assets/:id/edit', requireAuth, can('assets:write'), async (req, res, next) => {
   const asset = await prismaData.getAssetById(req.params.id);
   if (!asset) return next();
+  // SECURITY: belt-and-suspenders scope on /assets/:id/edit. The
+  // can('assets:write') middleware above already 403s non-write roles,
+  // but adding the same per-asset scope inside the handler keeps the
+  // pattern uniform with /assets/:id and /assets/:id/qr so a future
+  // maintainer can't be surprised by a non-write role ever reaching it.
+  const allowed = PERMISSIONS[req.session.userRole] || [];
+  const canWriteAssets = allowed.includes('assets:write');
+  if (!canWriteAssets && asset.assignedTo?.id !== req.session.userId) return next();
   res.render('pages/assets/edit', {
     title:      'Edit ' + asset.name,
     asset:      asset,
@@ -630,6 +647,13 @@ app.get('/assets/:id/edit', requireAuth, can('assets:write'), async (req, res, n
 app.get('/assets/:id/qr', requireAuth, can('assets:read'), async (req, res, next) => {
   const asset = await prismaData.getAssetById(req.params.id);
   if (!asset) return next();
+  // SECURITY: roles without 'assets:write' (EMPLOYEE, DEPARTMENT_HEAD)
+  // can only print QR for assets CURRENTLY ASSIGNED to them. Same
+  // 404 treatment as /assets/:id so the QR page can't be used as a
+  // cross-tenant asset enumerator either.
+  const allowed = PERMISSIONS[req.session.userRole] || [];
+  const canWriteAssets = allowed.includes('assets:write');
+  if (!canWriteAssets && asset.assignedTo?.id !== req.session.userId) return next();
   res.render('pages/assets/qr', {
     title: 'Print QR - ' + asset.name,
     asset: asset,
