@@ -1076,9 +1076,14 @@ app.get('/webhooks', requireAuth, can('communications:read'), async (req, res) =
 // the literal route first when both could match (e.g. an id of "new").
 // ----------------------------------------------------------------------
 
-// GET /roles/new — admin:read so anyone able to view the index can also
-// reach the create form. POST /roles below gates the actual write.
-app.get('/roles/new', requireAuth, can('admin:read'), async (_req, res) => {
+// GET /roles/new — admin:write gate. Only roles that can actually create
+// a role (IT_MANAGER today) can see the form. Previously this was
+// admin:read, which let any role with admin:read (IT_SUPPORT, AUDITOR)
+// render the form they could never submit -- a UX trap and, for
+// AUDITOR specifically, a perm-surface leak against the read-only role.
+// POST /roles below uses the same admin:write gate so the GET-vs-POST
+// surface stays in lockstep.
+app.get('/roles/new', requireAuth, can('admin:write'), async (_req, res) => {
   res.render('pages/roles/new', {
     title:       'New Role',
     slug:        'roles',
