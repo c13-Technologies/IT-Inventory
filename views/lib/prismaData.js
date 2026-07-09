@@ -175,8 +175,17 @@ async function getAssets({ status, categoryId, locationId, vendorId, assignedOnl
 }
 
 async function getAssetById(id) {
-  const asset = await prisma.asset.findUnique({
-    where: { id },
+  // SECURITY: tenant-scoped findFirst (NOT findUnique) so a cross-
+  // tenant asset row returns null. The previous findUnique had no
+  // tenantId filter and was the data-layer half of the same over-
+  // disclosure surface that the /assets/:id route-level assignedTo
+  // guard mitigates. After this fix, a request for a foreign-tenant
+  // asset cuid lands in the `if (!asset)` branch in server.js's
+  // /assets/:id handlers and 404s via the final fallback - so neither
+  // detail/edit/qr nor /api/* callers can leak cross-tenant asset data.
+  const tid = await tenantId();
+  const asset = await prisma.asset.findFirst({
+    where: { id, tenantId: tid },
     include: {
       ...assetInclude,
       assignments: { include: { user: true }, orderBy: { assignedAt: 'desc' } },
@@ -412,9 +421,19 @@ for (const { slug, model, name } of CRUD_SLUGS) {
     }
   };
 
-  // get<Name>ById(id) → row | null
+  // get<Name>ById(id) → row | null.
+  // SECURITY: tenant-scoped findFirst (NOT findUnique) so a row from
+  // another tenant returns null instead of leaking across boundaries
+  // when a low-perm user guesses a cuid from the URL. The unique-id
+  // lookup is preserved by the { id, tenantId: tid } compound predicate.
+  // All 9 CRUD entities are tenant-scoped (vendor/location/category/
+  // user/assignment/maintenance/license/department/approvalRequest),
+  // so this one fix covers every /<slug>/:id detail handler in the
+  // CRUD loop below. getRoleById (already correct) is intentionally
+  // NOT part of this factory - it has its own tenant-scoped findFirst.
   crudExports['get' + Name + 'ById'] = async function(id) {
-    return prisma[model].findUnique({ where: { id } });
+    const tid = await tenantId();
+    return prisma[model].findFirst({ where: { id, tenantId: tid } });
   };
 
   // list<Name>s() → rows[]
@@ -427,8 +446,14 @@ for (const { slug, model, name } of CRUD_SLUGS) {
 // Dedicated user detail query — includes role, department, assigned assets,
 // and audit history for the user detail page.
 async function getUserDetail(id) {
-  const user = await prisma.user.findUnique({
-    where: { id },
+  // SECURITY: tenant-scoped findFirst (NOT findUnique) so a logged-in
+  // directory:read user in one tenant can't browse a foreign tenant's
+  // user profile by guessing the cuid. /users/:id goes through THIS
+  // manual handler (registered above the CRUD loop), so it never hits
+  // the auto-CRUD getUserById above - it needs its OWN tenant filter.
+  const tid = await tenantId();
+  const user = await prisma.user.findFirst({
+    where: { id, tenantId: tid },
     include: {
       role: true,
       department: true,

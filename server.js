@@ -615,6 +615,12 @@ app.get('/assets/:id', requireAuth, can('assets:read'), async (req, res, next) =
   const allowed = PERMISSIONS[req.session.userRole] || [];
   const canWriteAssets = allowed.includes('assets:write');
   if (!canWriteAssets && asset.assignedTo?.id !== req.session.userId) return next();
+  // SECURITY (defense-in-depth): getAssetById is already tenant-scoped
+  // at the data layer (findFirst { id, tenantId: tid }). Explicit
+  // row-level check below documents intent at the call-site - 404
+  // is identical to "asset doesn't exist" or "wrong tenant" from the
+  // attacker's perspective.
+  if (asset.tenantId !== req.session.tenantId) return next();
   res.render('pages/assets/detail', {
     title:       asset.name,
     asset:       asset,
@@ -635,6 +641,7 @@ app.get('/assets/:id/edit', requireAuth, can('assets:write'), async (req, res, n
   const allowed = PERMISSIONS[req.session.userRole] || [];
   const canWriteAssets = allowed.includes('assets:write');
   if (!canWriteAssets && asset.assignedTo?.id !== req.session.userId) return next();
+  if (asset.tenantId !== req.session.tenantId) return next();
   res.render('pages/assets/edit', {
     title:      'Edit ' + asset.name,
     asset:      asset,
@@ -654,6 +661,7 @@ app.get('/assets/:id/qr', requireAuth, can('assets:read'), async (req, res, next
   const allowed = PERMISSIONS[req.session.userRole] || [];
   const canWriteAssets = allowed.includes('assets:write');
   if (!canWriteAssets && asset.assignedTo?.id !== req.session.userId) return next();
+  if (asset.tenantId !== req.session.tenantId) return next();
   res.render('pages/assets/qr', {
     title: 'Print QR - ' + asset.name,
     asset: asset,
@@ -673,6 +681,12 @@ app.get('/assets/:id/qr', requireAuth, can('assets:read'), async (req, res, next
 app.get('/users/:id', requireAuth, can('directory:read'), async (req, res, next) => {
   const user = await prismaData.getUserDetail(req.params.id);
   if (!user) return next();
+  // SECURITY (defense-in-depth): getUserDetail is already tenant-scoped
+  // at the data layer. This explicit row-level check stops a future
+  // data-layer loosening from re-introducing a cross-tenant user-detail
+  // leak (e.g. /users/<foreign-tenant-user-id> rendering another tenant's
+  // contact info / role / department).
+  if (user.tenantId !== req.session.tenantId) return next();
   res.render('pages/users/detail', {
     title:       user.fullName,
     slug:        'users',
@@ -1284,6 +1298,15 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   app.get('/' + slug + '/:id', requireAuth, can(perm + ':read'), async function(req, res, next) {
     const row = await prismaData['get' + Cap + 'ById'](req.params.id);
     if (!row) return next();
+    // SECURITY (defense-in-depth): get<Cap>ById is already tenant-scoped
+    // at the data layer (findFirst { id, tenantId: tid }), so a foreign
+    // cuid normally lands in the `if (!row)` branch above and 404s via
+    // the final fallback. This explicit row-level check exists so a
+    // future refactor that loosens the data-layer filter (e.g. someone
+    // optimising back to findUnique on a "no cross-tenant calls exist"
+    // misconception) still leaves the route safe, and so the security
+    // intent is documented at the call-site for anyone reading this file.
+    if (row.tenantId !== req.session.tenantId) return next();
     res.render('pages/' + slug + '/detail', {
       title: row.name || row.fullName || capLc + ' ' + req.params.id,
       slug, schema, row, sources: await getSources(slug),
