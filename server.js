@@ -1227,14 +1227,50 @@ listenWithFallback(app, PORT, HOST, MAX_PORT_ATTEMPTS)
     console.log(`Login page: http://${HOST}:${port}/auth-login.html`);
     console.log('Press Ctrl+C to stop.\n');
 
-    const shutdown = (signal) => {
+    // Graceful shutdown — drain in-flight HTTP requests, then disconnect
+    // the Prisma client so its connection pool is released back to Postgres.
+    // Without this, every Ctrl+C / nodemon restart / pkill silently leaks
+    // open connections until Postgres reaps them — quickly exhausting
+    // max_connections during dev/test churn (the classic
+    // "FATAL: sorry, too many clients already" symptom).
+    const shutdown = async (signal) => {
       console.log(`\n[server] Received ${signal}, shutting down...`);
-      server.close(() => process.exit(0));
-      // Force-exit if close() hangs.
-      setTimeout(() => process.exit(0), 2000).unref();
+      server.close(async (err) => {
+        if (err) console.error('[server] Error during server.close():', err.message);
+        try {
+          await prisma.$disconnect();
+          console.log('[server] Prisma disconnected, exiting cleanly.');
+        } catch (e) {
+          console.error('[server] Error disconnecting Prisma:', e.message);
+        }
+        process.exit(0);
+      });
+      // If a hung request prevents `server.close()` from firing, force-exit
+      // but FIRST try a best-effort $disconnect so we don't leak sockets —
+      // this is the exact path the original bug exposed.
+      setTimeout(() => {
+        console.warn('[server] Graceful shutdown timed out, forcing exit.');
+        prisma.$disconnect()
+          .catch((e) => console.error('[server] Force-exit disconnect failed:', e.message))
+          .finally(() => process.exit(1));
+      }, 5000).unref();
     };
-    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGINT',  () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+    // Last-resort safety nets — if Node crashes (uncaught throw or
+    // unhandled rejection), still disconnect Prisma so we never leak DB
+    // sockets, even on the unhappy path.
+    process.on('uncaughtException', async (err) => {
+      console.error('[server] Uncaught exception:', err);
+      try { await prisma.$disconnect(); } catch (e) { console.error('[server] Disconnect after exception failed:', e.message); }
+      process.exit(1);
+    });
+    process.on('unhandledRejection', async (reason) => {
+      console.error('[server] Unhandled rejection:', reason);
+      try { await prisma.$disconnect(); } catch (e) { console.error('[server] Disconnect after rejection failed:', e.message); }
+      process.exit(1);
+    });
   })
   .catch((err) => {
     console.error(`\n[server] Failed to start: ${err.message}`);
