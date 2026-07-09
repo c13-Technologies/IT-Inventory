@@ -7,7 +7,7 @@
     <script src="assets/libs/node-waves/waves.min.js"></script>
     <script src="assets/libs/pace-js/pace.min.js"></script>
 
-    <!-- Minia theme's master JS. Powers sidebar chevron collapse (metisMenu init on #side-menu), the right-bar settings panel (layout mode, layout width, sidebar size, topbar/sidebar color, layout direction), the vertical-menu button, fullscreen toggle, feather.replace(), Waves.init(), and tooltip/popover/toast auto-init. Served locally (zero CDN policy). -->
+    <!-- Clarity theme's master JS. Powers sidebar chevron collapse (metisMenu init on #side-menu), the right-bar settings panel (layout mode, layout width, sidebar size, topbar/sidebar color, layout direction), the vertical-menu button, fullscreen toggle, feather.replace(), Waves.init(), and tooltip/popover/toast auto-init. Served locally (zero CDN policy). -->
     <script src="assets/js/app.js"></script>
 
 <% if (typeof pageScripts !== "undefined" && pageScripts && pageScripts.length) { %>
@@ -22,7 +22,7 @@
     <!-- Right-bar (settings panel) — was missing from the project; included here so the gear icon in the topbar works. -->
     <%- include('../partials/rightbar') %>
 
-    <!-- Dark-mode persistence spy: Minia app.js toggles the visual theme but does not save the choice to localStorage, so a reload falls back to light. Mirror its decisions here so the choice survives a refresh (the FOUC shim in head.ejs then re-applies it on the next page load). -->
+    <!-- Dark-mode persistence spy: Clarity app.js toggles the visual theme but does not save the choice to localStorage, so a reload falls back to light. Mirror its decisions here so the choice survives a refresh (the FOUC shim in head.ejs then re-applies it on the next page load). -->
     <script>
       (function () {
         function init() {

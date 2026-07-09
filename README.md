@@ -1,7 +1,7 @@
-# IT Inventory
+# IT Inventory (Clarity)
 
 > Multi-tenant IT asset inventory management system for organizations.
-> Built on the [Minia](https://themesbrand.com/minia/) admin template.
+> Built on the [Minia](https://themesbrand.com/minia/) admin template, rebranded as **Clarity** for c13-tech inventory management.
 
 ![Status](https://img.shields.io/badge/status-in%20development-yellow)
 ![License](https://img.shields.io/badge/license-MIT-blue)
@@ -24,7 +24,7 @@ Track the full lifecycle of every laptop, monitor, phone, license, and periphera
 - **Audit logging** — automatic before/after snapshots on every create, update, and delete across all 9 CRUD entities
 - **Profile page** — view account details, change password with validation
 - **Last-login tracking** — `lastLoginAt` updated on every successful login
-- **Split-panel login page** — Minia auth layout with testimonial carousel, password visibility toggle, demo account badges
+- **Split-panel login page** — Clarity auth layout with testimonial carousel, password visibility toggle, demo account badges
 - **RBAC-aware sidebar** — menu sections conditionally shown/hidden based on user permissions
 - **User-aware topbar** — shows logged-in user name, role, profile link, and sign-out
 - **Seed data** — 32 real-world records: 1 tenant, 4 roles, 2 departments, 4 users, 5 vendors, 4 locations, 6 categories, 8 assets, 3 assignments, 3 maintenance records
@@ -48,7 +48,7 @@ Track the full lifecycle of every laptop, monitor, phone, license, and periphera
 | ORM | Prisma 5 |
 | Auth | bcrypt + express-session |
 | Templating | EJS partials (head, topbar, sidebar, footer, scripts) |
-| Frontend | jQuery + Bootstrap 5 (Minia template) |
+| Frontend | jQuery + Bootstrap 5 (Clarity template — Minia fork) |
 | Charts | ApexCharts, Sparklines, jVectorMap |
 
 ## Project structure
@@ -77,11 +77,11 @@ Track the full lifecycle of every laptop, monitor, phone, license, and periphera
 │       ├── prismaData.js      # async Prisma data layer (drop-in for mockData)
 │       ├── mockData.js        # original in-memory mock data (kept for reference)
 │       └── schemas.js         # field shapes for all CRUD entities
-├── assets/                    # Minia static assets (CSS, JS, images, fonts, libs)
+├── assets/                    # Clarity static assets (CSS, JS, images, fonts, libs)
 ├── docs/
 │   └── erd.md                 # Mermaid ERD — source of truth for the schema
 ├── scripts/                   # dev utility scripts
-└── ref/                       # reference HTML from Minia template
+└── ref/                       # reference HTML from original Minia template (kept for diffing / template updates)
 ```
 
 ## Quickstart
@@ -187,7 +187,7 @@ MIT
 
 ## Acknowledgments
 
-- UI built on the [Minia](https://themesbrand.com/minia/) admin template by Themesbrand
+- UI based on the [Minia](https://themesbrand.com/minia/) admin template by Themesbrand, rebranded as **Clarity**
 - Charts by [ApexCharts](https://apexcharts.com/)
 - Icons by [Boxicons](https://boxicons.com/), [Font Awesome](https://fontawesome.com/), and [Material Design Icons](https://materialdesignicons.com/)
 - Map by [jVectorMap](https://jvectormap.com/)

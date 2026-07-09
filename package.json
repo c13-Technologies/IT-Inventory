@@ -1,8 +1,8 @@
 {
-  "name": "minia-inventory",
+  "name": "clarity-inventory",
   "version": "1.0.0",
   "private": true,
-  "description": "Minia admin dashboard served via Express. Static-site mode: the existing HTML/CSS/JS in this folder is served as-is.",
+  "description": "Clarity — Inventory & Management admin dashboard served via Express. EJS templates render server-side against a Prisma/Postgres backend.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

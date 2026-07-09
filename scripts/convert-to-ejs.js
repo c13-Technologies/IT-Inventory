@@ -37,7 +37,7 @@ const COMMON_LIBS = [
 const COMMON_LIB_SET = new Set(COMMON_LIBS);
 const APP_JS = 'assets/js/app.js';
 
-const SUFFIX_RE = /\s*\|\s*Minia.*$/i;
+const SUFFIX_RE = /\s*\|\s*Clarity.*$/i;
 
 // ---------------- helpers ----------------
 
@@ -124,7 +124,7 @@ function buildPartials() {
   if (!headSrc) throw new Error('Could not extract head from index.html');
   const headEjs = headSrc.replace(
     /<title>[^<]+<\/title>/,
-    '<title><%= title %> | Minia - Minimal Admin & Dashboard Template</title>'
+    '<title><%= title %> | Clarity - Inventory & Management</title>'
   );
   write('views/partials/head.ejs', headEjs);
 

@@ -467,7 +467,7 @@ app.get('/:page.html', (req, res, next) => {
   const page = req.params.page;
   // Defensive: only allow simple, single-segment page names. This blocks any
   // attempt to escape views/pages/ (e.g. via ".." or path tricks) and ensures
-  // we only ever render files we actually generated from the Minia template.
+  // we only ever render files we actually generated from the Clarity template (originally a Minia fork).
   if (!/^[a-zA-Z0-9_-]+$/.test(page)) return next();
   // Require auth for all non-public pages (blocks /assets.html, /vendors.html, etc.)
   if (!PUBLIC_PAGES.test(page) && (!req.session || !req.session.userId)) {
@@ -1222,7 +1222,7 @@ listenWithFallback(app, PORT, HOST, MAX_PORT_ATTEMPTS)
     if (attempts > 0) {
       console.log(`[server] Bound after ${attempts} retry(ies).`);
     }
-    console.log(`\nMinia server running at http://${HOST}:${port}`);
+    console.log(`\nClarity server running at http://${HOST}:${port}`);
     console.log(`Dashboard:  http://${HOST}:${port}/`);
     console.log(`Login page: http://${HOST}:${port}/auth-login.html`);
     console.log('Press Ctrl+C to stop.\n');

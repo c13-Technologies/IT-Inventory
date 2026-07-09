@@ -5,7 +5,7 @@
 
     <meta charset="utf-8" />
     <base href="/">
-    <!-- Dark/light mode FOUC prevention: app.js (the Minia theme's master JS) toggles the visual theme but does not persist the choice across reloads, so the small persistence spy in scripts.ejs writes it to localStorage and this block reads it back on the next request. Sets data-bs-theme synchronously in <head> BEFORE first paint on BOTH <html> (Bootstrap CSS selectors) AND <body> (Minia app.js's init branch logic reads from body, so it MUST be set to the saved value to avoid app.js silently flipping to dark when the saved choice is light). -->
+    <!-- Dark/light mode FOUC prevention: app.js (the Clarity theme's master JS) toggles the visual theme but does not persist the choice across reloads, so the small persistence spy in scripts.ejs writes it to localStorage and this block reads it back on the next request. Sets data-bs-theme synchronously in <head> BEFORE first paint on BOTH <html> (Bootstrap CSS selectors) AND <body> (Clarity app.js's init branch logic reads from body, so it MUST be set to the saved value to avoid app.js silently flipping to dark when the saved choice is light). -->
     <script>
       (function () {
         try {
@@ -20,14 +20,14 @@
         } catch (e) { /* localStorage may be disabled */ }
       })();
     </script>
-    <title><%= title %> | Minia - Minimal Admin & Dashboard Template</title>
+    <title><%= title %> | Clarity - Inventory & Management</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta content="Premium Multipurpose Admin & Dashboard Template" name="description" />
     <meta content="Themesbrand" name="author" />
     <!-- App favicon -->
     <link rel="shortcut icon" href="assets/images/favicon.ico">
 
-    <!-- IBM Plex Sans (Minia's native font — copied from ref/assets/css/app.min.css @import; provides darker, more readable text vs the fallback sans-serif) -->
+    <!-- IBM Plex Sans (Clarity's native font — copied from ref/assets/css/app.min.css @import; provides darker, more readable text vs the fallback sans-serif) -->
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
 
     <!-- plugin css -->

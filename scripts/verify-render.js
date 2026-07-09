@@ -51,7 +51,7 @@ async function main() {
   let booted = false;
   srv.stdout.on('data', d => {
     const s = d.toString();
-    if (s.includes('Minia server running')) booted = true;
+    if (s.includes('Clarity server running')) booted = true;
   });
   srv.stderr.on('data', d => process.stderr.write(d));
 
