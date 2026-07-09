@@ -23,8 +23,10 @@
 <% var _ra_modal = (typeof modalMode !== 'undefined' && modalMode); %>
 <% var _ra_viewMod = (typeof viewMode !== 'undefined' && viewMode === 'modal'); %>
 <% var _ra_viewTarget = (typeof viewModalTarget !== 'undefined') ? viewModalTarget : ''; %>
+<%# One-shot dev warning when viewMode=modal but viewModalTarget is missing.
+    Without the dedupe we'd warn once per row → console spam on big tables. %>
 <% if (_ra_viewMod && !_ra_viewTarget) { %>
-  <script>console.warn('row-actions: viewMode="modal" requires viewModalTarget (e.g. "#viewLocationModal"). Button will open nothing until fixed.', { slug: '<%= slug %>', id: '<%= id %>' });</script>
+  <script>if (!window.__ra_modal_warned) { window.__ra_modal_warned = true; console.warn('row-actions: viewMode="modal" requires viewModalTarget (e.g. "#viewLocationModal"). Button will open nothing until fixed.', { slug: '<%= slug %>', id: '<%= id %>' }); }</script>
 <% } %>
 <div class="d-flex gap-1 justify-content-end">
   <% if (_ra_viewMod) { %>
