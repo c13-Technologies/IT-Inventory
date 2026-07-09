@@ -55,7 +55,7 @@
                               <td><span class="badge bg-info-subtle text-info"><%= (l.type || '').replace(/_/g, ' ') %></span></td>
                               <td class="text-muted"><%= l.address || '—' %></td>
                               <td><%- l.parentId ? '<code class="text-muted">' + l.parentId + '</code>' : '<span class="text-muted">— top-level —</span>' %></td>
-                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'locations', id: l.id, capLc: 'location', modalMode: true }) %></td>
+                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'locations', id: l.id, capLc: 'location', modalMode: true, viewMode: 'modal', viewModalTarget: '#viewLocationModal' }) %></td>
                             </tr>
                           <% }); %>
                         </tbody>
@@ -72,6 +72,7 @@
 
           <%- include('../../partials/modals/crud-modal', { slug: 'locations', cap: 'Location', schema: (typeof schema !== 'undefined' ? schema : []), sources: (typeof sources !== 'undefined' ? sources : {}) }) %>
           <%- include('../../partials/modals/delete-modal') %>
+          <%- include('../../partials/modals/view-location') %>
 
         </div>
       </div>

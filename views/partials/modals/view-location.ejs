@@ -1,0 +1,141 @@
+<%# views/partials/modals/view-location.ejs
+   Shared Bootstrap modal showing the details of one location.
+   Triggered from the locations list via [data-bs-toggle="modal"]
+   on the row's [View] button, OR programmatically via
+   window.openViewLocationModal(id). Both paths go through
+   populateLocationModal(row) below so the rendering is identical.
+
+   Edit / Delete reuse existing crud-modal + deleteModal helpers.
+   Back just closes this modal — the locations list stays mounted behind it.
+%>
+<div class="modal fade" id="viewLocationModal" tabindex="-1" aria-labelledby="viewLocationModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="viewLocationModalLabel">
+          <i class="bx bx-map me-1"></i>Location details
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <%# Each [data-field="key"] gets populated from __CRUD_ROWS__[rowId][key] by
+            populateLocationModal() below. All rendering goes through textContent
+            so XSS-injectable row data never reaches innerHTML. %>
+        <dl class="row mb-0" id="viewLocationFields">
+          <dt class="col-sm-4 text-muted fw-normal">Name</dt>
+          <dd class="col-sm-8" data-field="name">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Type</dt>
+          <dd class="col-sm-8" data-field="type">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Address</dt>
+          <dd class="col-sm-8" data-field="address">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">Parent</dt>
+          <dd class="col-sm-8" data-field="parent">&mdash;</dd>
+          <dt class="col-sm-4 text-muted fw-normal">ID</dt>
+          <dd class="col-sm-8"><code class="text-muted" data-field="id">&mdash;</code></dd>
+        </dl>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">
+          <i class="bx bx-arrow-back me-1"></i>Back
+        </button>
+        <button type="button" class="btn btn-outline-danger" id="viewLocationDeleteBtn">
+          <i class="bx bx-trash me-1"></i>Delete
+        </button>
+        <a href="#" class="btn btn-primary" id="viewLocationEditBtn" tabindex="-1" aria-disabled="true">
+          <i class="bx bx-edit me-1"></i>Edit
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var modalEl  = document.getElementById('viewLocationModal');
+  if (!modalEl) return;
+
+  var titleEl  = document.getElementById('viewLocationModalLabel');
+  var editBtn  = document.getElementById('viewLocationEditBtn');
+  var delBtn   = document.getElementById('viewLocationDeleteBtn');
+  var fieldEls = modalEl.querySelectorAll('[data-field]');
+
+  // Display value with em-dash fallback for null/empty.
+  function displayVal(v) {
+    if (v == null || v === '') return '\u2014';
+    return String(v).replace(/_/g, ' ');
+  }
+
+  // Populate the modal from a row object. All fields use textContent — never
+  // innerHTML — so row data is never interpreted as markup.
+  function populateLocationModal(row) {
+    var name = (row.name || '').trim();
+    if (titleEl) titleEl.textContent = name || 'Location details';
+
+    // Look up field nodes by data-field attribute.
+    var map = {
+      name:    row.name,
+      type:    row.type,
+      address: row.address,
+      // Plain text fallback for parent — the parent id is a cuid so plain
+      // text is fine; avoids the "top-level" html span entirely.
+      parent:  row.parentId || '\u2014 top-level \u2014',
+      id:      row.id,
+    };
+    fieldEls.forEach(function(el) {
+      var key = el.dataset.field;
+      el.textContent = displayVal(map[key]);
+    });
+
+    // Wire the action buttons for this specific row.
+    if (editBtn) {
+      editBtn.href = '/locations/' + row.id + '/edit';
+      editBtn.removeAttribute('aria-disabled');
+      editBtn.removeAttribute('tabindex');
+    }
+    if (delBtn) {
+      if (typeof window.openDeleteModal === 'function') {
+        // Ensure visible even if a previous populate hid it.
+        delBtn.style.display = '';
+        delBtn.onclick = function() {
+          var modalBs = bootstrap.Modal.getInstance(modalEl);
+          if (modalBs) modalBs.hide();
+          window.openDeleteModal('locations', row.id, 'location');
+        };
+      } else {
+        // deleteModal is not installed on this page — hide the Delete
+        // button rather than risk a GET on the POST-only delete route.
+        delBtn.style.display = 'none';
+      }
+    }
+  }
+
+  // Bootstrap-driven trigger: when a row's [View] button carries
+  //   data-bs-toggle="modal" data-bs-target="#viewLocationModal" data-row-id="<id>"
+  // the show.bs.modal event fires with relatedTarget = that button, so we
+  // know which row to load. Avoids an inline onclick string entirely.
+  modalEl.addEventListener('show.bs.modal', function(ev) {
+    var btn = ev.relatedTarget;
+    var id = btn && btn.dataset && btn.dataset.rowId;
+    if (!id) return;
+    var row = (window.__CRUD_ROWS__ || {})[id];
+    if (!row) {
+      console.warn('viewLocationModal: no row in __CRUD_ROWS__ for id', id);
+      return;
+    }
+    populateLocationModal(row);
+  });
+
+  // Optional programmatic opener — same populate path. Useful for testing,
+  // browser-console poking, or future callers that don't use data-bs-toggle.
+  window.openViewLocationModal = function(rowId) {
+    var row = (window.__CRUD_ROWS__ || {})[rowId];
+    if (!row) {
+      console.warn('openViewLocationModal: no row in __CRUD_ROWS__ for id', rowId);
+      return;
+    }
+    populateLocationModal(row);
+    var modalBs = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modalBs.show();
+  };
+});
+</script>

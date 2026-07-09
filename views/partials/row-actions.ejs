@@ -1,17 +1,40 @@
 <%# views/partials/row-actions.ejs
    Locals:
-     - slug      : 'vendors' | 'licenses' | etc.
-     - id        : row.id
-     - mode      : 'full' (View+Edit+Delete, default) | 'mini' (Edit only). Optional.
-     - capLc     : optional lowercase singular label (e.g., 'vendor', 'license').
-     - modalMode : boolean (optional) — when true, Edit opens crudModal and
-                   Delete opens deleteModal via JS helpers instead of linking
-                   to /edit and posting a form directly.
+     - slug            : 'vendors' | 'licenses' | etc.
+     - id              : row.id
+     - mode            : 'full' (View+Edit+Delete, default) | 'mini' (Edit only). Optional.
+     - capLc           : optional lowercase singular label (e.g., 'vendor', 'license').
+     - modalMode       : boolean (optional) — when true, Edit opens crudModal and
+                         Delete opens deleteModal via JS helpers instead of linking
+                         to /edit and posting a form directly.
+     - viewMode        : 'page' (default) — View links to /<slug>/<id>. Pass 'modal'
+                         to render a button that opens a shared modal via
+                         Bootstrap data-bs-toggle="modal" + data-row-id — the
+                         modal partial listens for the show.bs.modal event and
+                         populates itself.
+     - viewModalTarget : required when viewMode='modal' — the #id of the modal
+                         to open, e.g. '#viewLocationModal'. The target modal's
+                         show.bs.modal handler is responsible for reading
+                         `data-row-id` and rendering the row.
+                         Avoids an inline `onclick` attribute (which was brittle
+                         if `slug`/`id` ever contained a quote character).
 %>
 <% var _ra_mode = (typeof mode === 'undefined' || mode === null) ? 'full' : mode; %>
 <% var _ra_modal = (typeof modalMode !== 'undefined' && modalMode); %>
+<% var _ra_viewMod = (typeof viewMode !== 'undefined' && viewMode === 'modal'); %>
+<% var _ra_viewTarget = (typeof viewModalTarget !== 'undefined') ? viewModalTarget : ''; %>
+<% if (_ra_viewMod && !_ra_viewTarget) { %>
+  <script>console.warn('row-actions: viewMode="modal" requires viewModalTarget (e.g. "#viewLocationModal"). Button will open nothing until fixed.', { slug: '<%= slug %>', id: '<%= id %>' });</script>
+<% } %>
 <div class="d-flex gap-1 justify-content-end">
-  <a href="/<%= slug %>/<%= id %>" class="btn btn-sm btn-soft-primary" title="View"><i class="bx bx-show"></i></a>
+  <% if (_ra_viewMod) { %>
+    <button type="button" class="btn btn-sm btn-soft-primary" title="View"
+            data-bs-toggle="modal" data-bs-target="<%= _ra_viewTarget %>" data-row-id="<%= id %>">
+      <i class="bx bx-show"></i>
+    </button>
+  <% } else { %>
+    <a href="/<%= slug %>/<%= id %>" class="btn btn-sm btn-soft-primary" title="View"><i class="bx bx-show"></i></a>
+  <% } %>
   <% if (_ra_modal) { %>
     <button type="button" class="btn btn-sm btn-soft-secondary" title="Edit"
             onclick="openCrudModalEdit('<%= slug %>','<%= capLc || slug.replace(/s$/, '') %>','<%= id %>')">
