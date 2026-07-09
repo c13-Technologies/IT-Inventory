@@ -137,14 +137,22 @@ const FK_ERROR_MESSAGES = {
 // ---------------------------------------------------------------------------
 
 // Assets (with filtering + pagination)
-async function getAssets({ status, categoryId, locationId, vendorId, assignedOnly, search, page = 1, pageSize = 25 } = {}) {
+async function getAssets({ status, categoryId, locationId, vendorId, assignedOnly, assignedUserId, search, page = 1, pageSize = 25 } = {}) {
   const tid = await tenantId();
   const where = { tenantId: tid };
   if (status)       where.status    = status;
   if (categoryId)   where.categoryId = categoryId;
   if (locationId)   where.locationId = locationId;
   if (vendorId)     where.vendorId   = vendorId;
-  if (assignedOnly) where.assignments = { some: { returnedAt: null } };
+  // Per-user scope: assets with an ACTIVE assignment to `assignedUserId`.
+  // Takes precedence over `assignedOnly` (any active assignment) since this
+  // is a stricter filter. Used for the EMPLOYEE/DEPARTMENT_HEAD landing
+  // page (auto-scoped server-side in server.js's /assets GET route).
+  if (assignedUserId) {
+    where.assignments = { some: { userId: assignedUserId, returnedAt: null } };
+  } else if (assignedOnly) {
+    where.assignments = { some: { returnedAt: null } };
+  }
   if (search) {
     where.OR = [
       { name:         { contains: search, mode: 'insensitive' } },

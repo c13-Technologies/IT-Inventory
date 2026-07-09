@@ -558,23 +558,39 @@ const prismaData = require('./views/lib/prismaData');
 const loginGuard = require('./views/lib/loginGuard');
 
 app.get('/assets', requireAuth, can('assets:read'), async (req, res) => {
+  // SECURITY: roles without 'assets:write' (DEPARTMENT_HEAD, EMPLOYEE)
+  // are server-side auto-scoped to their own ACTIVE assignments so the
+  // landing page these users arrive at after the /api dashboard gate
+  // redirects them doesn't dump the full tenant asset list. The scope
+  // is enforced here, not via a query param — a low-perm user can't
+  // opt out by editing the URL.
+  const role = req.session.userRole;
+  const allowed = PERMISSIONS[role] || [];
+  const canWriteAssets = allowed.includes('assets:write');
+  const scopedUserId = canWriteAssets ? undefined : req.session.userId;
   const result = await prismaData.getAssets({
-    status:       req.query.status       || undefined,
-    categoryId:   req.query.categoryId   || undefined,
-    locationId:   req.query.locationId   || undefined,
-    vendorId:     req.query.vendorId     || undefined,
-    assignedOnly: req.query.assignedOnly === '1',
-    search:       req.query.search       || undefined,
-    page:         Number(req.query.page)  || 1,
+    status:         req.query.status         || undefined,
+    categoryId:     req.query.categoryId     || undefined,
+    locationId:     req.query.locationId     || undefined,
+    vendorId:       req.query.vendorId       || undefined,
+    assignedOnly:   req.query.assignedOnly === '1',
+    search:         req.query.search         || undefined,
+    page:           Number(req.query.page)    || 1,
+    assignedUserId: scopedUserId,
   });
   res.render('pages/assets/index', {
-    title:      TITLES['assets'] || 'Assets',
-    query:      req.query,
-    result:     result,
-    assetsAll:  await prismaData.getAssets(),
-    categories: await prismaData.getCategories(),
-    locations:  await prismaData.getLocations(),
-    vendors:    await prismaData.getVendors(),
+    title:           TITLES['assets'] || 'Assets',
+    query:           req.query,
+    result:          result,
+    isPersonalScope: !canWriteAssets,
+    // Both queries carry the SAME scope. When scoped, assetsAll.total
+    // equals result.total so the "X of Y" hint vanishes automatically
+    // (the existing view checks result.total !== assetsAll.total).
+    // For admins, both are unscoped — the hint shows normally.
+    assetsAll:       await prismaData.getAssets({ assignedUserId: scopedUserId }),
+    categories:      await prismaData.getCategories(),
+    locations:       await prismaData.getLocations(),
+    vendors:         await prismaData.getVendors(),
   });
 });
 
