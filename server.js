@@ -300,8 +300,16 @@ app.post('/profile/password', requireAuth, async (req, res) => {
     });
   }
   try {
-    // Look up user and verify current password
-    const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
+    // Look up user and verify current password. We MUST `include` the
+    // tenant + role relations so the post-regenerate session can be
+    // re-populated with tenantSlug + userRole (the same fields
+    // POST /login sets) -- otherwise the new session loses tenant
+    // context and silently breaks permission gates + audit-log
+    // attribution below.
+    const user = await prisma.user.findUnique({
+      where: { id: req.session.userId },
+      include: { tenant: true, role: true },
+    });
     if (!user) {
       return res.status(400).render('pages/profile', {
         title:   'My Profile',
@@ -324,15 +332,31 @@ app.post('/profile/password', requireAuth, async (req, res) => {
         error:   'New password must be different from current password.',
       });
     }
+    // SECURITY (commit b30ee7a followup): capture the session fields
+    // into local variables BEFORE regenerate. After regenerate runs,
+    // `req.session` is a FRESH empty session - any read on
+    // `req.session.tenantSlug` or `req.session.userRole` would return
+    // undefined and silently break the user's permission gates
+    // (can('dashboard:read') etc.) and audit-log attribution for the
+    // post-password-change session. Pre-fix the handler copy-pasted
+    // these from `req.session` (the new empty session) and the user
+    // would land on /profile with a session that had userId + tenantId
+    // but no tenantSlug + userRole. We now read them straight off
+    // `user` (with `tenant` + `role` included above) to match the
+    // POST /login capture shape exactly.
+    const postChangeTenantId   = user.tenantId;
+    const postChangeTenantSlug = user.tenant ? user.tenant.slug : null;
+    const postChangeUserName   = user.fullName;
+    const postChangeUserRole   = user.role  ? user.role.name.toUpperCase().replace(/ /g, '_') : null;
     // Hash new password, update, and regenerate session for security
     const hash = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
     req.session.regenerate(() => {
-      req.session.userId   = user.id;
-      req.session.tenantId = user.tenantId;
-      req.session.tenantSlug = req.session.tenantSlug;
-      req.session.userName = user.fullName;
-      req.session.userRole = req.session.userRole;
+      req.session.userId     = user.id;
+      req.session.tenantId   = postChangeTenantId;
+      req.session.tenantSlug = postChangeTenantSlug;
+      req.session.userName   = postChangeUserName;
+      req.session.userRole   = postChangeUserRole;
       res.render('pages/profile', {
         title:   'My Profile',
         success: 'Password changed successfully.',
