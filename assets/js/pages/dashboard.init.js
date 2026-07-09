@@ -1,4 +1,5 @@
-// dashboard.init.js — fetches /api/dashboard/stats and renders ApexCharts
+// dashboard.init.js — fetches /api/dashboard/stats + /api/dashboard/trends
+// and renders ApexCharts (bar, donut, sparklines) plus recent activity feed.
 (function () {
   'use strict';
 
@@ -15,6 +16,32 @@
     } catch (e) {
       return ["#5156be"];
     }
+  }
+
+  // Mini sparkline — 7-day area chart, no axes/legend/grid, smooth curve.
+  function renderSparkline(elId, data, color) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    var chart = new ApexCharts(el, {
+      chart: {
+        type: 'area',
+        height: 38,
+        sparkline: { enabled: true },
+        animations: { enabled: true, speed: 400 }
+      },
+      series: [{ name: elId, data: data }],
+      stroke: { curve: 'smooth', width: 2 },
+      fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.35, opacityTo: 0.05, stops: [0, 100] } },
+      colors: [color],
+      tooltip: {
+        enabled: true,
+        fixed: { enabled: false },
+        x: { show: false },
+        y: { formatter: function (v) { return v + ' added'; } },
+        marker: { show: false }
+      }
+    });
+    chart.render();
   }
 
   // Format the entity type + truncated ID for display
@@ -87,14 +114,37 @@
     LOST: 'Lost'
   };
 
-  // Fetch stats and render everything
+  // Sparkline palette — mirrors each card's data-colors attribute so the
+  // mini-chart and the bar/donut share the same accent. Hardcoded here so
+  // the JS doesn't have to round-trip getAttribute for each chart.
+  var SPARK_COLOR = {
+    'sparkline-assets':      '#5156be',
+    'sparkline-assignments': '#34c38f',
+    'sparkline-users':       '#50a5f1',
+    'sparkline-vendors':     '#f1b44c'
+  };
+
+  // Fetch stats + trends in parallel and render everything.
+  // Trends is optional — if it fails the dashboard still shows stat cards /
+  // bar + donut / activity feed; only the sparklines stay empty.
   function init() {
-    fetch('/api/dashboard/stats', { credentials: 'same-origin' })
-      .then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function (data) {
+    Promise.allSettled([
+      fetch('/api/dashboard/stats',  { credentials: 'same-origin' }).then(function (r) { if (!r.ok) throw new Error('stats HTTP ' + r.status); return r.json(); }),
+      fetch('/api/dashboard/trends', { credentials: 'same-origin' }).then(function (r) { if (!r.ok) throw new Error('trends HTTP ' + r.status); return r.json(); }),
+    ])
+      .then(function (results) {
+        var data = results[0].status === 'fulfilled' ? results[0].value : null;
+        var trends = results[1].status === 'fulfilled' ? results[1].value : { assets: [], users: [], assignments: [], vendors: [] };
+        if (!data) {
+          console.error('Dashboard stats unavailable:', results[0].reason);
+          if (results[1].status === 'rejected') console.warn('Dashboard trends also unavailable (sparklines disabled):', results[1].reason);
+          var list = document.getElementById('recent-activity-list');
+          if (list) list.innerHTML = '<li class="activity-list text-center text-muted py-4">Failed to load dashboard data.</li>';
+          return;
+        }
+        if (results[1].status === 'rejected') console.warn('Dashboard trends unavailable (sparklines disabled):', results[1].reason);
+        var trends = results[1];
+
         // Safe element setter helper
         function setText(id, val) {
           var el = document.getElementById(id);
@@ -129,6 +179,19 @@
         setWidth('qs-bar-inrepair', (irCount / total * 100).toFixed(0) + '%');
         setWidth('qs-bar-retired', (rtCount / total * 100).toFixed(0) + '%');
         setWidth('qs-bar-instock', (isCount / total * 100).toFixed(0) + '%');
+
+        // Sparklines (7-day trends per stat card)
+        function sparkSum(id) {
+          var elId = 'sparkline-' + id;
+          var arr = (trends && trends[id]) || [];
+          renderSparkline(elId, arr, SPARK_COLOR[elId] || '#5156be');
+          var total = arr.reduce(function (a, b) { return a + b; }, 0);
+          setText(elId + '-total', total + (id === 'vendors' ? ' new in 7d' : ' in 7d'));
+        }
+        sparkSum('assets');
+        sparkSum('assignments');
+        sparkSum('users');
+        sparkSum('vendors');
 
         // Chart: Assets by Category (horizontal bar)
         var catEl = document.getElementById('chart-assets-by-category');

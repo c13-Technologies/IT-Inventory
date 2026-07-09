@@ -394,6 +394,63 @@ app.get('/api/dashboard/stats', requireAuth, async (_req, res) => {
   }
 });
 
+// API — dashboard 7-day trends (sparkline data for the stat cards).
+//   Returns counts per day for the last 7 days (oldest -> newest).
+//   Each metric is numerically aligned with the `labels` array so the
+//   client can render Apache-style sparklines without re-pivoting.
+app.get('/api/dashboard/trends', requireAuth, async (_req, res) => {
+  try {
+    const tid = _req.session.tenantId;
+    const DAYS = 7;
+    // Build the 7 day-buckets (midnight..midnight) ending today, oldest first.
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const buckets = [];
+    for (let i = DAYS - 1; i >= 0; i--) {
+      const d = new Date(startOfToday);
+      d.setDate(d.getDate() - i);
+      buckets.push(d);
+    }
+    const from = buckets[0];
+    const labels = buckets.map(d => d.toISOString().slice(0, 10));
+    const inWindow = { createdAt: { gte: from } };
+
+    const [assetsRaw, usersRaw, assignmentsRaw, vendorsRaw] = await Promise.all([
+      prisma.asset.findMany({ where: { tenantId: tid, ...inWindow }, select: { createdAt: true } }),
+      prisma.user.findMany({ where: { tenantId: tid, ...inWindow }, select: { createdAt: true } }),
+      prisma.assignment.findMany({ where: { tenantId: tid, ...inWindow }, select: { assignedAt: true } }),
+      prisma.vendor.findMany({ where: { tenantId: tid, ...inWindow }, select: { createdAt: true } }),
+    ]);
+
+    // Bucket-by-day helper. Counts rows whose date falls in [buckets[i], buckets[i+1]).
+    function bucketize(records, getDate) {
+      const counts = new Array(DAYS).fill(0);
+      for (const r of records) {
+        const d = getDate(r);
+        if (!d) continue;
+        const t = d.getTime();
+        for (let i = 0; i < DAYS; i++) {
+          const lo = buckets[i].getTime();
+          const hi = i + 1 < DAYS ? buckets[i + 1].getTime() : startOfToday.getTime() + 24 * 60 * 60 * 1000;
+          if (t >= lo && t < hi) { counts[i]++; break; }
+        }
+      }
+      return counts;
+    }
+
+    res.json({
+      labels,
+      assets:       bucketize(assetsRaw, r => r.createdAt),
+      users:        bucketize(usersRaw, r => r.createdAt),
+      assignments:  bucketize(assignmentsRaw, r => r.assignedAt),
+      vendors:      bucketize(vendorsRaw, r => r.createdAt),
+    });
+  } catch (err) {
+    console.error('Dashboard trends error:', err);
+    res.status(500).json({ error: 'Failed to load dashboard trends.' });
+  }
+});
+
 // Error pages — set the right HTTP status before rendering the template.
 app.get('/pages-404.html', (_req, res) => {
   res.status(404).render('pages/pages-404', { title: TITLES['pages-404'] || '404' });

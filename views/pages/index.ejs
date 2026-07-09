@@ -42,7 +42,11 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <a href="/assets" class="text-decoration-underline text-muted font-size-13">View all assets <i class="mdi mdi-arrow-right"></i></a>
+                                    <div id="sparkline-assets" data-colors='["#5156be"]' class="apex-charts spark-card bg-primary-subtle rounded mb-3" style="height: 38px;"></div>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <a href="/assets" class="text-decoration-underline text-muted font-size-13">View all assets <i class="mdi mdi-arrow-right"></i></a>
+                                        <span class="text-muted font-size-11" id="sparkline-assets-total">-- in 7d</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -63,7 +67,11 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <a href="/assignments" class="text-decoration-underline text-muted font-size-13">View assignments <i class="mdi mdi-arrow-right"></i></a>
+                                    <div id="sparkline-assignments" data-colors='["#34c38f"]' class="apex-charts spark-card bg-success-subtle rounded mb-3" style="height: 38px;"></div>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <a href="/assignments" class="text-decoration-underline text-muted font-size-13">View assignments <i class="mdi mdi-arrow-right"></i></a>
+                                        <span class="text-muted font-size-11" id="sparkline-assignments-total">-- in 7d</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -84,7 +92,11 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <a href="/users" class="text-decoration-underline text-muted font-size-13">View directory <i class="mdi mdi-arrow-right"></i></a>
+                                    <div id="sparkline-users" data-colors='["#50a5f1"]' class="apex-charts spark-card bg-info-subtle rounded mb-3" style="height: 38px;"></div>
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <a href="/users" class="text-decoration-underline text-muted font-size-13">View directory <i class="mdi mdi-arrow-right"></i></a>
+                                        <span class="text-muted font-size-11" id="sparkline-users-total">-- in 7d</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -105,9 +117,15 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <a href="/vendors" class="text-decoration-underline text-muted font-size-13">Vendors <i class="mdi mdi-arrow-right"></i></a>
-                                    <span class="text-muted">|</span>
-                                    <a href="/locations" class="text-decoration-underline text-muted font-size-13">Locations <i class="mdi mdi-arrow-right"></i></a>
+                                    <div id="sparkline-vendors" data-colors='["#f1b44c"]' class="apex-charts spark-card bg-warning-subtle rounded mb-3" style="height: 38px;"></div>
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap">
+                                        <div>
+                                            <a href="/vendors" class="text-decoration-underline text-muted font-size-13">Vendors <i class="mdi mdi-arrow-right"></i></a>
+                                            <span class="text-muted mx-1">|</span>
+                                            <a href="/locations" class="text-decoration-underline text-muted font-size-13">Locations <i class="mdi mdi-arrow-right"></i></a>
+                                        </div>
+                                        <span class="text-muted font-size-11" id="sparkline-vendors-total">-- new in 7d</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
