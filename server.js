@@ -186,6 +186,22 @@ function requireAuth(req, res, next) {
   res.redirect('/login');
 }
 
+// Resolve the effective permission set for the current request. Reads
+// the DB-driven `req.session.userPermissions` (preloaded at login /
+// password change) when present, otherwise falls back to the builtins
+// map for the session's userRole. The hasOwnProperty gate is a
+// SECURITY check: a custom role saved with zero perms (explicit `[]`)
+// must stay an explicit `[]` and NOT be silently re-elevated by the
+// builtins map. Every call site in this file should use this helper
+// instead of inlining the 4-line pattern, so a future change to the
+// resolution logic (e.g. add a third tier, swap to per-request DB
+// lookup) is a one-line edit here instead of an 8-site find-and-replace.
+function getAllowedPerms(req) {
+  return req.session.hasOwnProperty('userPermissions')
+    ? req.session.userPermissions
+    : (BUILTIN_PERMISSIONS[req.session.userRole] || []);
+}
+
 // ----------------------------------------------------------------------
 // Role-based access control (RBAC)
 // ----------------------------------------------------------------------
@@ -230,16 +246,7 @@ const BUILTIN_PERMISSIONS = buildBuiltinKeyMap();
 // didn't know about them).
 function can(permission) {
   return (req, res, next) => {
-    const role = req.session.userRole;
-    // SECURITY: distinguish "not set" (undefined) from "explicitly empty"
-    // (a custom role with no permissions saved). The naive
-    // `userPermissions || BUILTIN[...]` chain would silently grant the
-    // builtins' perms to a user whose zero-perm custom role should 403
-    // everything. hasOwnProperty gates the fallback so an explicit []
-    // stays an explicit [].
-    const allowed = req.session.hasOwnProperty('userPermissions')
-      ? req.session.userPermissions
-      : (BUILTIN_PERMISSIONS[role] || []);
+    const allowed = getAllowedPerms(req);
     if (!allowed.includes(permission)) {
       return res.status(403).render('pages/pages-404', {
         title: 'Access Denied',
@@ -283,9 +290,7 @@ app.use((req, res, next) => {
     role: role,
     tenantSlug: req.session.tenantSlug,
   } : null;
-  res.locals.userPermissions = req.session.hasOwnProperty('userPermissions')
-    ? req.session.userPermissions
-    : (role ? (BUILTIN_PERMISSIONS[role] || []) : []);
+  res.locals.userPermissions = getAllowedPerms(req);
   next();
 });
 
@@ -427,10 +432,7 @@ app.post('/profile/password', requireAuth, async (req, res) => {
 // endpoints below so the UI can never silently succeed (empty chart)
 // OR fail (403 toast) with data the user's role shouldn't see.
 app.get('/', requireAuth, async (req, res) => {
-  const allowed = req.session.hasOwnProperty('userPermissions')
-    ? req.session.userPermissions
-    : (BUILTIN_PERMISSIONS[req.session.userRole] || []);
-  if (!allowed.includes('dashboard:read')) {
+  if (!getAllowedPerms(req).includes('dashboard:read')) {
     return res.redirect('/assets');
   }
   res.render('pages/index', {
@@ -612,14 +614,7 @@ app.get('/:page.html', (req, res, next) => {
   if (!PUBLIC_PAGES.test(page) && PAGE_PERMISSIONS.hasOwnProperty(page)) {
     const required = PAGE_PERMISSIONS[page];
     if (required) {
-      const role = req.session.userRole;
-      // Same hasOwnProperty-gated fallback as the can() middleware so
-      // a custom role with zero perms doesn't silently re-elevate via
-      // the builtins map.
-      const allowed = req.session.hasOwnProperty('userPermissions')
-        ? req.session.userPermissions
-        : (BUILTIN_PERMISSIONS[role] || []);
-      if (!allowed.includes(required)) {
+      if (!getAllowedPerms(req).includes(required)) {
         return res.status(403).render('pages/pages-404', {
           title: 'Access Denied',
           errorMessage: 'You do not have permission to access this page.',
@@ -651,15 +646,11 @@ app.get('/assets', requireAuth, can('assets:read'), async (req, res) => {
   // redirects them doesn't dump the full tenant asset list. The scope
   // is enforced here, not via a query param — a low-perm user can't
   // opt out by editing the URL.
-  const role = req.session.userRole;
   // Same hasOwnProperty-gated fallback as the can() middleware. Without
   // the gate, a user whose custom role was saved with zero permissions
   // would silently be re-elevated to the IT_MANAGER perm set and skip
   // the personal-asset scoping.
-  const allowed = req.session.hasOwnProperty('userPermissions')
-    ? req.session.userPermissions
-    : (BUILTIN_PERMISSIONS[role] || []);
-  const canWriteAssets = allowed.includes('assets:write');
+  const canWriteAssets = getAllowedPerms(req).includes('assets:write');
   const scopedUserId = canWriteAssets ? undefined : req.session.userId;
   const result = await prismaData.getAssets({
     status:         req.query.status         || undefined,
@@ -705,15 +696,11 @@ app.get('/assets/:id', requireAuth, can('assets:read'), async (req, res, next) =
   // so a logged-in low-perm user cannot probe tenant cuids from the
   // URL to leak vendor / purchase cost / warranty / assignment history.
   // 404 (not 403) deliberately - 403 would confirm the cuid exists.
-  const role = req.session.userRole;
   // Same hasOwnProperty-gated fallback as the can() middleware. Without
   // the gate, a user whose custom role was saved with zero permissions
   // would silently be re-elevated to the IT_MANAGER perm set and bypass
   // the per-asset ownership check.
-  const allowed = req.session.hasOwnProperty('userPermissions')
-    ? req.session.userPermissions
-    : (BUILTIN_PERMISSIONS[role] || []);
-  const canWriteAssets = allowed.includes('assets:write');
+  const canWriteAssets = getAllowedPerms(req).includes('assets:write');
   if (!canWriteAssets && asset.assignedTo?.id !== req.session.userId) return next();
   // SECURITY (defense-in-depth): getAssetById is already tenant-scoped
   // at the data layer (findFirst { id, tenantId: tid }). Explicit
@@ -738,15 +725,11 @@ app.get('/assets/:id/edit', requireAuth, can('assets:write'), async (req, res, n
   // but adding the same per-asset scope inside the handler keeps the
   // pattern uniform with /assets/:id and /assets/:id/qr so a future
   // maintainer can't be surprised by a non-write role ever reaching it.
-  const role = req.session.userRole;
   // Same hasOwnProperty-gated fallback as the can() middleware. Without
   // the gate, a user whose custom role was saved with zero permissions
   // would silently be re-elevated to the IT_MANAGER perm set and bypass
   // the per-asset ownership check.
-  const allowed = req.session.hasOwnProperty('userPermissions')
-    ? req.session.userPermissions
-    : (BUILTIN_PERMISSIONS[role] || []);
-  const canWriteAssets = allowed.includes('assets:write');
+  const canWriteAssets = getAllowedPerms(req).includes('assets:write');
   if (!canWriteAssets && asset.assignedTo?.id !== req.session.userId) return next();
   if (asset.tenantId !== req.session.tenantId) return next();
   res.render('pages/assets/edit', {
@@ -765,15 +748,11 @@ app.get('/assets/:id/qr', requireAuth, can('assets:read'), async (req, res, next
   // can only print QR for assets CURRENTLY ASSIGNED to them. Same
   // 404 treatment as /assets/:id so the QR page can't be used as a
   // cross-tenant asset enumerator either.
-  const role = req.session.userRole;
   // Same hasOwnProperty-gated fallback as the can() middleware. Without
   // the gate, a user whose custom role was saved with zero permissions
   // would silently be re-elevated to the IT_MANAGER perm set and bypass
   // the per-asset ownership check.
-  const allowed = req.session.hasOwnProperty('userPermissions')
-    ? req.session.userPermissions
-    : (BUILTIN_PERMISSIONS[role] || []);
-  const canWriteAssets = allowed.includes('assets:write');
+  const canWriteAssets = getAllowedPerms(req).includes('assets:write');
   if (!canWriteAssets && asset.assignedTo?.id !== req.session.userId) return next();
   if (asset.tenantId !== req.session.tenantId) return next();
   res.render('pages/assets/qr', {
