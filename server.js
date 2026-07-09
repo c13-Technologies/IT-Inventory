@@ -616,7 +616,7 @@ app.get('/vendors', requireAuth, can('directory:read'), async (req, res) => {
     query:   req.query,
     vendors: rows,
     schema:  schemas['vendors'] || [],
-    sources: getSources('vendors'),
+    sources: await getSources('vendors'),
     statusOptions: ['', 'ACTIVE', 'INACTIVE'],
   });
 });
@@ -634,7 +634,7 @@ app.get('/locations', requireAuth, can('directory:read'), async (req, res) => {
     query:     req.query,
     locations: rows,
     schema:    schemas['locations'] || [],
-    sources:   getSources('locations'),
+    sources:   await getSources('locations'),
   });
 });
 
@@ -653,7 +653,7 @@ app.get('/categories', requireAuth, can('directory:read'), async (req, res) => {
     query:         req.query,
     categories:    rows,
     schema:        schemas['categories'] || [],
-    sources:       getSources('categories'),
+    sources:       await getSources('categories'),
     statusOptions: ['', 'HARDWARE', 'SOFTWARE', 'PERIPHERAL', 'ACCESSORY'],
   });
 });
@@ -673,7 +673,7 @@ app.get('/users', requireAuth, can('directory:read'), async (req, res) => {
     query:         req.query,
     users:         rows,
     schema:        schemas['users'] || [],
-    sources:       getSources('users'),
+    sources:       await getSources('users'),
     statusOptions: ['', 'IT_MANAGER', 'IT_SUPPORT', 'DEPARTMENT_HEAD', 'EMPLOYEE'],
   });
 });
@@ -695,7 +695,7 @@ app.get('/assignments', requireAuth, can('lifecycle:read'), async (req, res) => 
     query:       req.query,
     assignments: rows,
     schema:      schemas['assignments'] || [],
-    sources:     getSources('assignments'),
+    sources:     await getSources('assignments'),
   });
 });
 
@@ -752,7 +752,7 @@ app.get('/departments', requireAuth, can('directory:read'), async (req, res) => 
     query:       req.query,
     departments: rows,
     schema:      schemas['departments'] || [],
-    sources:     getSources('departments'),
+    sources:     await getSources('departments'),
   });
 });
 app.get('/approvals', requireAuth, can('lifecycle:read'), async (req, res) => {
@@ -770,7 +770,7 @@ app.get('/approvals', requireAuth, can('lifecycle:read'), async (req, res) => {
     query:         req.query,
     approvals:     rows,
     schema:        schemas['approvals'] || [],
-    sources:       getSources('approvals'),
+    sources:       await getSources('approvals'),
     statusOptions: ['', 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'],
   });
 });
