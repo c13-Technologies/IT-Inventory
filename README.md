@@ -135,6 +135,7 @@ All accounts use password: `password123`
 | Billy Nick | billy.nick@c13-tech.com | IT Support |
 | Lydia Acheng | lydia.acheng@c13-tech.com | Employee |
 | Sande Ochieno | sande.ochieno@c13-tech.com | Department Head |
+| Audra Auditor | auditor.auditor@c13-tech.com | Auditor (read-only) |
 
 ## Scripts
 

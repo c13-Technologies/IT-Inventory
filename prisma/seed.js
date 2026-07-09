@@ -77,14 +77,18 @@ async function main() {
   const deptENG = await prisma.department.create({
     data: { tenantId: tenant.id, name: 'Engineering', code: 'ENG' },
   });
-  console.log('  ✓ Departments: 2');
+  const deptCOMP = await prisma.department.create({
+    data: { tenantId: tenant.id, name: 'Compliance', code: 'COMP' },
+  });
+  console.log('  ✓ Departments: 3');
 
   // ── 4. Users ───────────────────────────────────────────────────
   const userData = [
-    { fullName: 'Alex Bytestorm', email: 'alex.bytestorm@c13-tech.com', roleKey: 'IT_MANAGER',      department: deptIT  },
-    { fullName: 'Billy Nick',    email: 'billy.nick@c13-tech.com',       roleKey: 'IT_SUPPORT',      department: deptIT  },
-    { fullName: 'Lydia Acheng',  email: 'lydia.acheng@c13-tech.com',     roleKey: 'EMPLOYEE',        department: deptENG },
-    { fullName: 'Sande Ochieno', email: 'sande.ochieno@c13-tech.com',    roleKey: 'DEPARTMENT_HEAD', department: deptENG },
+    { fullName: 'Alex Bytestorm',   email: 'alex.bytestorm@c13-tech.com',   roleKey: 'IT_MANAGER',      department: deptIT   },
+    { fullName: 'Billy Nick',      email: 'billy.nick@c13-tech.com',       roleKey: 'IT_SUPPORT',      department: deptIT   },
+    { fullName: 'Lydia Acheng',    email: 'lydia.acheng@c13-tech.com',     roleKey: 'EMPLOYEE',        department: deptENG  },
+    { fullName: 'Sande Ochieno',   email: 'sande.ochieno@c13-tech.com',    roleKey: 'DEPARTMENT_HEAD', department: deptENG  },
+    { fullName: 'Audra Auditor',    email: 'auditor.auditor@c13-tech.com',  roleKey: 'AUDITOR',        department: deptCOMP },
   ];
   const users = [];
   for (const u of userData) {
@@ -104,7 +108,7 @@ async function main() {
   // Update department heads
   await prisma.department.update({ where: { id: deptIT.id },  data: { headId: users[0].id } });
   await prisma.department.update({ where: { id: deptENG.id }, data: { headId: users[3].id } });
-  console.log('  ✓ Users: 4');
+  console.log(`  ✓ Users: ${users.length}`);
 
   // ── 5. Vendors ─────────────────────────────────────────────────
   const vendorData = [
