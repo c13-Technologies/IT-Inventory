@@ -557,6 +557,175 @@ async function getWebhooks() {
   });
 }
 
+// ===========================================================================
+// Role CRUD — backing logic for views/pages/roles/{new,edit,detail}.ejs.
+//
+// Not part of the generic CRUD_SLUGS loop because:
+//   1. Roles have a M:N junction (RolePermission) that the generic loop
+//      doesn't generate — explicit transaction handling is required so the
+//      metadata and permission set never get out of sync.
+//   2. Builtin roles (`isBuiltin: true`) have write-protection rules that
+//      the generic loop can't enforce (no name rename, no delete, but
+//      description + permissions are still mutable).
+//   3. The form UI uses a grouped permissions picker (not crud-form.ejs).
+// ===========================================================================
+
+// Permission namespace catalog — drives the role form layout AND documents
+// the canonical 12 permission codes the system ships with. Mirrors the
+// namespaces in server.js's PERMISSIONS const; if you add a new namespace
+// here, add a matching entry in server.js's PERMISSIONS for the 4 builtins.
+const PERMISSION_GROUPS = [
+  { namespace: 'assets',         label: 'Assets',         description: 'Hardware, software, accessories — view and modify records.' },
+  { namespace: 'lifecycle',      label: 'Lifecycle',      description: 'Assignments, maintenance, approvals, warranty.' },
+  { namespace: 'directory',      label: 'Directory',      description: 'Users, vendors, locations, categories, departments.' },
+  { namespace: 'inventory',      label: 'Inventory',      description: 'Software licenses and seat allocation.' },
+  { namespace: 'admin',          label: 'Admin',          description: 'Roles, audit log, reports.' },
+  { namespace: 'communications', label: 'Communications', description: 'Notifications and webhook subscriptions.' },
+];
+
+async function getPermissions() {
+  return prisma.permission.findMany({ orderBy: { code: 'asc' } });
+}
+
+// Single role lookup with relations denormalized for the detail / edit views.
+// Returns permissionCodes (string[]) so the edit form's checkboxes can be
+// pre-checked without re-mapping through the junction table.
+// Tenant-scoped: a role from another tenant is treated as 'not found' so
+// admins can't probe or mutate cross-tenant roles via direct URL.
+async function getRoleById(id) {
+  const tid = await tenantId();
+  const role = await prisma.role.findFirst({
+    where: { id, tenantId: tid },
+    include: {
+      users: { select: { id: true, fullName: true, email: true, status: true }, orderBy: { fullName: 'asc' } },
+      rolePermissions: { include: { permission: true } },
+      _count: { select: { users: true, rolePermissions: true } },
+    },
+  });
+  if (!role) return null;
+  return {
+    ...role,
+    permissionCodes: role.rolePermissions.map(rp => rp.permission.code),
+    userCount:       role._count.users,
+    permissionCount: role._count.rolePermissions,
+  };
+}
+
+async function createRole(input) {
+  const errors = {};
+  const name = input && input.name ? String(input.name).trim() : '';
+  if (!name) errors.name = 'Name is required';
+  if (Object.keys(errors).length) return { success: false, errors };
+  try {
+    const tid = await tenantId();
+    const codes = parsePermissionCodes(input);
+    const perms = codes.length
+      ? await prisma.permission.findMany({ where: { code: { in: codes } }, select: { id: true } })
+      : [];
+    const role = await prisma.role.create({
+      data: {
+        tenantId: tid,
+        name,
+        description: (input.description && String(input.description).trim()) || null,
+        isBuiltin: false, // UI-created roles are never builtin
+        rolePermissions: {
+          create: perms.map(p => ({ permissionId: p.id })),
+        },
+      },
+      include: { rolePermissions: { include: { permission: true } } },
+    });
+    auditLog('role.create', 'role', role.id, null, role);
+    return { success: true, data: role };
+  } catch (err) {
+    if (err.code === 'P2002') {
+      return { success: false, errors: { _global: 'A role with this name already exists in this tenant.' } };
+    }
+    throw err;
+  }
+}
+
+async function updateRole(id, input) {
+  const existing = await prisma.role.findUnique({ where: { id } });
+  if (!existing) return { success: false, errors: { _global: 'Role not found.' } };
+  // Builtins: name is NOT mutable (so the hardcoded PERMISSIONS const in
+  // server.js can keep its IT_MANAGER/IT_SUPPORT/DEPARTMENT_HEAD/EMPLOYEE
+  // keys stable across the system). Description is always editable.
+  const errors = {};
+  let name = existing.name;
+  if (!existing.isBuiltin) {
+    name = input && input.name ? String(input.name).trim() : '';
+    if (!name) errors.name = 'Name is required';
+  }
+  if (Object.keys(errors).length) return { success: false, errors };
+  try {
+    const codes = parsePermissionCodes(input);
+    const perms = codes.length
+      ? await prisma.permission.findMany({ where: { code: { in: codes } }, select: { id: true } })
+      : [];
+    const updated = await prisma.$transaction(async (tx) => {
+      const data = {
+        description: (input.description !== undefined)
+          ? ((input.description && String(input.description).trim()) || null)
+          : existing.description,
+      };
+      if (!existing.isBuiltin) data.name = name;
+      await tx.role.update({ where: { id }, data });
+      // Replace the role's permission set atomically. Using delete+create
+      // instead of `connectOrCreate` because the same permissionId may be
+      // toggled off and on in the same request — and we want the final set
+      // to mirror the form exactly.
+      await tx.rolePermission.deleteMany({ where: { roleId: id } });
+      if (perms.length) {
+        await tx.rolePermission.createMany({
+          data: perms.map(p => ({ roleId: id, permissionId: p.id })),
+        });
+      }
+      return await tx.role.findUnique({
+        where: { id },
+        include: { rolePermissions: { include: { permission: true } } },
+      });
+    });
+    auditLog('role.update', 'role', id, existing, updated);
+    return { success: true, data: updated };
+  } catch (err) {
+    if (err.code === 'P2002') {
+      return { success: false, errors: { _global: 'A role with this name already exists in this tenant.' } };
+    }
+    throw err;
+  }
+}
+
+async function deleteRole(id) {
+  const existing = await prisma.role.findUnique({ where: { id } });
+  if (!existing) return { success: false, errors: { _global: 'Role not found.' } };
+  if (existing.isBuiltin) {
+    return { success: false, errors: { _global: 'Cannot delete a built-in role. Contact a system administrator if removal is required.' } };
+  }
+  try {
+    // onDelete: Restrict on User.roleId means deleting a role that still
+    // has users attached will throw P2003 / P2014 — caught below.
+    await prisma.role.delete({ where: { id } });
+    auditLog('role.delete', 'role', id, existing, null);
+    return { success: true };
+  } catch (err) {
+    if (err.code === 'P2003' || err.code === 'P2014') {
+      return { success: false, errors: { _global: 'Cannot delete: one or more users still hold this role. Reassign their role first.' } };
+    }
+    throw err;
+  }
+}
+
+// Express urlencoded parser (with extended:true / qs) collects repeated
+// form fields like `name="permissions[]"` into an array. This helper handles
+// both arrays and comma-separated strings for flexibility (e.g. JSON POSTs).
+function parsePermissionCodes(input) {
+  if (!input) return [];
+  const raw = input.permissions !== undefined ? input.permissions : input.permissionCodes;
+  if (Array.isArray(raw)) return raw.map(String).map(s => s.trim()).filter(Boolean);
+  if (typeof raw === 'string') return raw.split(',').map(s => s.trim()).filter(Boolean);
+  return [];
+}
+
 // Reports — no dedicated table, always empty
 function getReports() {
   return [];
@@ -591,6 +760,14 @@ module.exports = Object.assign({}, crudExports, {
   getReports,
   getNotifications,
   getWebhooks,
+  // Role CRUD (dedicated — see the block above; not in the auto-CRUD loop)
+  createRole,
+  updateRole,
+  deleteRole,
+  getRoleById,
+  getPermissions,
+  parsePermissionCodes,
+  PERMISSION_GROUPS,
   // Constants
   AssetStatus: {
     IN_STOCK:  'IN_STOCK',

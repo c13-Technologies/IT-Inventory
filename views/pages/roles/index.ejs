@@ -51,11 +51,27 @@
                         <tbody>
                           <% roles.forEach(function(r) { %>
                             <tr>
-                              <td><strong><%= r.name %></strong><% if (r.isBuiltin) { %> <span class="badge bg-info ms-1">built-in</span><% } %></td>
+                              <td>
+                                <strong><a href="/roles/<%= r.id %>" class="text-reset"><%= r.name %></a></strong>
+                                <% if (r.isBuiltin) { %> <span class="badge bg-info ms-1">built-in</span><% } else { %> <span class="badge bg-secondary ms-1">custom</span><% } %>
+                              </td>
                               <td><%= r.description || '—' %></td>
                               <td><span class="badge bg-secondary"><%= (r.permissionCount || 0) %></span></td>
                               <td><span class="badge bg-light text-dark"><%= (r.userCount || 0) %></span></td>
-                              <td class="text-end"><%- include('../../partials/row-actions', { slug: 'roles', id: r.id, capLc: 'role' }) %></td>
+                              <td class="text-end">
+                                <div class="d-flex gap-1 justify-content-end">
+                                  <a href="/roles/<%= r.id %>" class="btn btn-sm btn-soft-primary" title="View"><i class="bx bx-show"></i></a>
+                                  <% if (!r.isBuiltin) { %>
+                                    <a href="/roles/<%= r.id %>/edit" class="btn btn-sm btn-soft-secondary" title="Edit"><i class="bx bx-edit"></i></a>
+                                    <form method="POST" action="/roles/<%= r.id %>/delete" onsubmit="return confirm('Delete this role? Users still mapped to it must be reassigned first.');" style="display:inline">
+                                      <button type="submit" class="btn btn-sm btn-soft-danger" title="Delete"><i class="bx bx-trash"></i></button>
+                                    </form>
+                                  <% } else { %>
+                                    <span class="btn btn-sm btn-soft-secondary disabled" style="opacity:0.4" title="Built-in roles cannot be edited from the UI"><i class="bx bx-edit"></i></span>
+                                    <span class="btn btn-sm btn-soft-danger disabled" style="opacity:0.4" title="Built-in roles cannot be deleted"><i class="bx bx-trash"></i></span>
+                                  <% } %>
+                                </div>
+                              </td>
                             </tr>
                           <% }); %>
                         </tbody>

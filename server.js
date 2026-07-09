@@ -924,6 +924,128 @@ app.get('/webhooks', requireAuth, can('communications:read'), async (req, res) =
 });
 
 // ----------------------------------------------------------------------
+// Role CRUD — dedicated routes (not in the auto-CRUD loop). See the
+// comment block in views/lib/prismaData.js for why this is hand-written.
+// express.urlencoded({extended:true}) parses `name="permissions[]"`
+// repeated fields into req.body.permissions as a string[].
+// NOTE: /roles/new is registered BEFORE /roles/:id so Express matches
+// the literal route first when both could match (e.g. an id of "new").
+// ----------------------------------------------------------------------
+
+// GET /roles/new — admin:read so anyone able to view the index can also
+// reach the create form. POST /roles below gates the actual write.
+app.get('/roles/new', requireAuth, can('admin:read'), async (_req, res) => {
+  res.render('pages/roles/new', {
+    title:       'New Role',
+    slug:        'roles',
+    row:         { permissions: [] },
+    sources:     { permissions: await prismaData.getPermissions() },
+    groups:      prismaData.PERMISSION_GROUPS,
+    parentCrumb: 'Admin',
+    cap:         'Role',
+    capLc:       'role',
+    errors:      {},
+  });
+});
+
+// POST /roles — create a new role with its permission set. Server-side
+// builtin=false enforcement so the UI can't sneak a system role past us.
+app.post('/roles', requireAuth, can('admin:write'), async (req, res) => {
+  const result = await prismaData.createRole(req.body || {});
+  if (!result.success) {
+    return res.status(400).render('pages/roles/new', {
+      title:       'New Role',
+      slug:        'roles',
+      row:         Object.assign({}, req.body || {}, { permissions: prismaData.parsePermissionCodes(req.body || {}) }),
+      sources:     { permissions: await prismaData.getPermissions() },
+      groups:      prismaData.PERMISSION_GROUPS,
+      parentCrumb: 'Admin',
+      cap:         'Role',
+      capLc:       'role',
+      errors:      result.errors,
+    });
+  }
+  res.redirect('/roles/' + result.data.id);
+});
+
+// GET /roles/:id — read-only detail (works for builtins too, just no edit/delete buttons).
+app.get('/roles/:id', requireAuth, can('admin:read'), async (req, res, next) => {
+  const row = await prismaData.getRoleById(req.params.id);
+  if (!row) return next();
+  res.render('pages/roles/detail', {
+    title:       row.name,
+    slug:        'roles',
+    row,
+    sources:     { permissions: await prismaData.getPermissions() },
+    groups:      prismaData.PERMISSION_GROUPS,
+    parentCrumb: 'Admin',
+    cap:         'Role',
+    capLc:       'role',
+    errors:      {},
+  });
+});
+
+// GET /roles/:id/edit
+app.get('/roles/:id/edit', requireAuth, can('admin:read'), async (req, res, next) => {
+  const row = await prismaData.getRoleById(req.params.id);
+  if (!row) return next();
+  res.render('pages/roles/edit', {
+    title:       'Edit ' + row.name,
+    slug:        'roles',
+    row:         Object.assign({}, row, { permissions: row.permissionCodes || [] }),
+    sources:     { permissions: await prismaData.getPermissions() },
+    groups:      prismaData.PERMISSION_GROUPS,
+    parentCrumb: 'Admin',
+    cap:         'Role',
+    capLc:       'role',
+    errors:      {},
+  });
+});
+
+// POST /roles/:id — update an existing role. Builtin protection is
+// enforced inside prismaData.updateRole (name is held; description +
+// permissions remain mutable so an admin can clarify a builtin).
+app.post('/roles/:id', requireAuth, can('admin:write'), async (req, res, next) => {
+  const existing = await prismaData.getRoleById(req.params.id);
+  if (!existing) return next();
+  const result = await prismaData.updateRole(req.params.id, req.body || {});
+  if (!result.success) {
+    const resubmittedPerms = prismaData.parsePermissionCodes(req.body || {});
+    return res.status(400).render('pages/roles/edit', {
+      title:       'Edit ' + existing.name,
+      slug:        'roles',
+      row:         Object.assign({}, existing, req.body || {}, { permissions: resubmittedPerms }),
+      sources:     { permissions: await prismaData.getPermissions() },
+      groups:      prismaData.PERMISSION_GROUPS,
+      parentCrumb: 'Admin',
+      cap:         'Role',
+      capLc:       'role',
+      errors:      result.errors,
+    });
+  }
+  res.redirect('/roles/' + req.params.id);
+});
+
+// POST /roles/:id/delete — block builtins server-side; gracefully surface
+// FK-Restrict failures (users still attached to this role) as inline errors.
+app.post('/roles/:id/delete', requireAuth, can('admin:write'), async (req, res) => {
+  const result = await prismaData.deleteRole(req.params.id);
+  if (result.success) return res.redirect('/roles');
+  const row = await prismaData.getRoleById(req.params.id) || { id: req.params.id, name: 'Role' };
+  res.status(400).render('pages/roles/detail', {
+    title:       row.name,
+    slug:        'roles',
+    row,
+    sources:     { permissions: await prismaData.getPermissions() },
+    groups:      prismaData.PERMISSION_GROUPS,
+    parentCrumb: 'Admin',
+    cap:         'Role',
+    capLc:       'role',
+    errors:      result.errors,
+  });
+});
+
+// ----------------------------------------------------------------------
 // Static assets — every other file in the project root (assets/, fonts.*/,
 // _DataURI/, docs/, prisma/, server.js, package.json, etc.). We do NOT
 // serve *.html here; the EJS routes above own those URLs.

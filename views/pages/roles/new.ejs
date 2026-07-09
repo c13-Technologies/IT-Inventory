@@ -1,0 +1,135 @@
+<%- include('../../partials/head', { title: title }) %>
+
+<body>
+  <div id="layout-wrapper">
+    <%- include('../../partials/topbar') %>
+    <%- include('../../partials/sidebar') %>
+
+    <div class="main-content">
+      <div class="page-content">
+        <div class="container-fluid">
+
+          <div class="row">
+            <div class="col-12">
+              <div class="page-title-box d-sm-flex align-items-center justify-content-between">
+                <h4 class="mb-sm-0 font-size-18">New Role</h4>
+                <div class="page-title-right">
+                  <%- include('../../partials/breadcrumb', { items: [
+                    { label: 'Home', href: '/' },
+                    { label: 'Admin', href: '/roles' },
+                    { label: 'New', href: null }
+                  ] }) %>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-lg-10">
+              <div class="card">
+                <div class="card-body">
+                  <form method="POST" action="/roles" class="crud-form">
+                    <% if (errors && errors._global) { %>
+                      <div class="alert alert-danger"><i class="bx bx-error-circle me-1"></i><%= errors._global %></div>
+                    <% } %>
+
+                    <div class="row">
+                      <div class="col-md-6">
+                        <div class="mb-3">
+                          <label class="form-label" for="rf-name">Name <span class="text-danger ms-1">*</span></label>
+                          <input type="text" id="rf-name" name="name"
+                                 class="form-control <%= errors && errors.name ? 'is-invalid' : '' %>"
+                                 value="<%= row.name || '' %>" required
+                                 placeholder="e.g. IT Auditor">
+                          <% if (errors && errors.name) { %>
+                            <div class="invalid-feedback d-block"><%= errors.name %></div>
+                          <% } %>
+                        </div>
+                      </div>
+                      <div class="col-md-6">
+                        <div class="mb-3">
+                          <label class="form-label" for="rf-description">Description</label>
+                          <input type="text" id="rf-description" name="description"
+                                 class="form-control"
+                                 value="<%= row.description || '' %>"
+                                 placeholder="Optional. What this role is for.">
+                        </div>
+                      </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                      <div>
+                        <h5 class="mb-1">Permissions</h5>
+                        <p class="text-muted small mb-0">Tick the boxes for what this role can do. Read = view-only; Write = create / edit / delete.</p>
+                      </div>
+                      <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="rf-toggle-writes" onclick="document.querySelectorAll('input[name=&quot;permissions[]&quot;][value$=\":write\"]').forEach(function(b){ b.checked = this.checked; }.bind(this))">
+                        <label class="form-check-label" for="rf-toggle-writes">Select all writes</label>
+                      </div>
+                    </div>
+
+                    <div class="row g-3">
+                      <% groups.forEach(function(g) { %>
+                        <div class="col-md-6">
+                          <div class="border rounded p-3 h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                              <strong><%= g.label %></strong>
+                              <code class="text-muted small"><%= g.namespace %>:*</code>
+                            </div>
+                            <p class="text-muted small mb-3"><%= g.description %></p>
+                            <div class="d-flex gap-4">
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       id="perm-<%= g.namespace %>-read"
+                                       name="permissions[]"
+                                       value="<%= g.namespace %>:read"
+                                       <%= (row.permissions || []).includes(g.namespace + ':read') ? 'checked' : '' %>>
+                                <label class="form-check-label" for="perm-<%= g.namespace %>-read">Read</label>
+                              </div>
+                              <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       id="perm-<%= g.namespace %>-write"
+                                       name="permissions[]"
+                                       value="<%= g.namespace %>:write"
+                                       <%= (row.permissions || []).includes(g.namespace + ':write') ? 'checked' : '' %>>
+                                <label class="form-check-label" for="perm-<%= g.namespace %>-write">Write</label>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      <% }); %>
+                    </div>
+
+                    <div class="alert alert-info mt-4 mb-0 d-flex align-items-start">
+                      <i class="bx bx-info-circle me-2 mt-1"></i>
+                      <div class="small">
+                        Custom roles can be created and assigned permissions freely, but the runtime permission gate
+                        (<code>server.js</code>'s <code>PERMISSIONS</code> const) is currently hardcoded for the 4
+                        built-in roles. Custom roles will appear in the sidebar but won't actually unlock pages until
+                        the PERMISSIONS map is migrated to be DB-driven. See the audit-log entry on each role for the
+                        current state.
+                      </div>
+                    </div>
+
+                    <div class="d-flex gap-2 mt-4">
+                      <button type="submit" class="btn btn-primary">
+                        <i class="bx bx-plus me-1"></i>Create role
+                      </button>
+                      <a href="/roles" class="btn btn-light">Cancel</a>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      <%- include('../../partials/footer') %>
+    </div>
+  </div>
+  <%- include('../../partials/scripts', { pageScripts: [] }) %>
+</body>
+</html>
