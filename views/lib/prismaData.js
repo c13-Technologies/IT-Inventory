@@ -634,9 +634,14 @@ async function getWebhooks() {
 // ===========================================================================
 
 // Permission namespace catalog — drives the role form layout AND documents
-// the canonical 12 permission codes the system ships with. Mirrors the
-// namespaces in server.js's PERMISSIONS const; if you add a new namespace
-// here, add a matching entry in server.js's PERMISSIONS for the 4 builtins.
+// the canonical 13 permission codes the system ships with. Mirrors the
+// namespaces in server.js's LEGACY_BUILTIN_PERMISSIONS const + the
+// 13 codes in prisma/seed.js's PERMISSION_CODES. If you add a new
+// namespace here, add a matching entry in seed.js PERMISSION_CODES
+// (so the Permission row gets created) AND in the matching builtin
+// role's BUILTIN_PERMISSIONS array (so the role_permissions junction
+// row gets linked) AND in LEGACY_BUILTIN_PERMISSIONS in server.js
+// (so the fallback for pre-migration sessions still works).
 const PERMISSION_GROUPS = [
   { namespace: 'assets',         label: 'Assets',         description: 'Hardware, software, accessories — view and modify records.' },
   { namespace: 'lifecycle',      label: 'Lifecycle',      description: 'Assignments, maintenance, approvals, warranty.' },
@@ -644,6 +649,7 @@ const PERMISSION_GROUPS = [
   { namespace: 'inventory',      label: 'Inventory',      description: 'Software licenses and seat allocation.' },
   { namespace: 'admin',          label: 'Admin',          description: 'Roles, audit log, reports.' },
   { namespace: 'communications', label: 'Communications', description: 'Notifications and webhook subscriptions.' },
+  { namespace: 'dashboard',      label: 'Dashboard',      description: 'Read-only access to tenant-aggregate dashboard metrics (total assets, users, vendors, status counts, 7-day trends, recent activity).' },
 ];
 
 async function getPermissions() {

@@ -105,11 +105,12 @@
                     <div class="alert alert-info mt-4 mb-0 d-flex align-items-start">
                       <i class="bx bx-info-circle me-2 mt-1"></i>
                       <div class="small">
-                        Custom roles can be created and assigned permissions freely, but the runtime permission gate
-                        (<code>server.js</code>'s <code>PERMISSIONS</code> const) is currently hardcoded for the 4
-                        built-in roles. Custom roles will appear in the sidebar but won't actually unlock pages until
-                        the PERMISSIONS map is migrated to be DB-driven. See the audit-log entry on each role for the
-                        current state.
+                        Custom roles are persisted to the <code>roles</code> + <code>role_permissions</code> tables
+                        and gate pages on the next login (the <code>can()</code> middleware reads the user's permission
+                        codes from <code>req.session.userPermissions</code>, preloaded at login from the DB). The
+                        5 built-in roles (IT Manager, IT Support, Department Head, Employee, Auditor) are seeded with
+                        the same permission sets the legacy <code>PERMISSIONS</code> const used, so a fresh seed gives
+                        every demo user the same access they had before the migration.
                       </div>
                     </div>
 

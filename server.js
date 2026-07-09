@@ -120,7 +120,12 @@ app.post('/login', async (req, res) => {
     // tenantId_email compound key, so findFirst across tenants works at login).
     const user = await prisma.user.findFirst({
       where: { email },
-      include: { tenant: true, role: true },
+      // Deep-include rolePermissions so the post-regenerate session can
+      // be preloaded with the user's actual permission codes (DB-driven
+      // RBAC). Without this `role.rolePermissions` would be undefined
+      // and the session would get an empty permissions array, silently
+      // locking the user out of every gated route until they re-login.
+      include: { tenant: true, role: { include: { rolePermissions: { include: { permission: true } } } } },
     });
     // Combined invalid-because-no-user + invalid-because-bad-password path.
     // Avoids user-enumeration leaks. Either outcome counts as ONE failed
@@ -140,6 +145,15 @@ app.post('/login', async (req, res) => {
       req.session.tenantSlug = user.tenant ? user.tenant.slug : null;
       req.session.userName = user.fullName;
       req.session.userRole = user.role ? user.role.name.toUpperCase().replace(/ /g, '_') : null;
+      // Preload the DB-driven perm codes so can(perm) can gate from
+      // session without a per-request DB lookup. The deep include above
+      // (role -> rolePermissions -> permission) is what populates this
+      // array. Falls back to [] for users with no role or a role with
+      // no permissions - can(perm) will then 403 every route, which is
+      // the fail-safe behavior (no accidental privilege escalation).
+      req.session.userPermissions = user.role && user.role.rolePermissions
+        ? user.role.rolePermissions.map(rp => rp.permission.code)
+        : [];
       // Successful login — clear the IP's bucket + counter + any lockout.
       loginGuard.clearOnSuccess(req.ip);
       res.redirect(redirectTo);
@@ -176,7 +190,20 @@ function requireAuth(req, res, next) {
 //   inventory:read / inventory:write
 //   admin:read / admin:write
 //   communications:read / communications:write
-const PERMISSIONS = {
+//   dashboard:read
+//
+// LEGACY_BUILTIN_PERMISSIONS is the FALLBACK for sessions that pre-date
+// the DB-driven migration (commit landed with this PR). New sessions
+// get `req.session.userPermissions` preloaded at login (see POST /login
+// + POST /profile/password) and can(perm) reads that array first. The
+// fallback only fires for in-flight sessions from before the migration
+// that haven't been re-issued yet - they'll be re-issued on next page
+// load since the session id stays the same but the userPermissions field
+// gets written on the next request that hits POST /login. Keeping the
+// const also doubles as the canonical 'what does each builtin role get'
+// reference for reviewers (mirrors prisma/seed.js BUILTIN_PERMISSIONS
+// and the role_permissions junction rows the seed writes).
+const LEGACY_BUILTIN_PERMISSIONS = {
   IT_MANAGER: [
     'assets:read', 'assets:write',
     'lifecycle:read', 'lifecycle:write',
@@ -229,10 +256,27 @@ const PERMISSIONS = {
 
 // Middleware factory — returns a middleware that checks the given permission.
 // Must be placed after requireAuth (which ensures req.session.userRole exists).
+//
+// DB-driven (commit this PR): checks `req.session.userPermissions` first
+// (preloaded at login by POST /login + POST /profile/password from the
+// user's Role → RolePermission → Permission chain). Falls back to
+// LEGACY_BUILTIN_PERMISSIONS[role] only for sessions that pre-date the
+// migration and haven't been re-issued. This means custom roles
+// created via /roles/new actually gate pages (the pre-migration
+// behavior was a silent 403 on every page because PERMISSIONS const
+// didn't know about them).
 function can(permission) {
   return (req, res, next) => {
     const role = req.session.userRole;
-    const allowed = PERMISSIONS[role] || [];
+    // SECURITY: distinguish "not set" (undefined) from "explicitly empty"
+    // (a custom role with no permissions saved). The naive
+    // `userPermissions || LEGACY[...]` chain would silently grant the
+    // legacy perms to a user whose zero-perm custom role should 403
+    // everything. hasOwnProperty gates the fallback so an explicit []
+    // stays an explicit [].
+    const allowed = req.session.hasOwnProperty('userPermissions')
+      ? req.session.userPermissions
+      : (LEGACY_BUILTIN_PERMISSIONS[role] || []);
     if (!allowed.includes(permission)) {
       return res.status(403).render('pages/pages-404', {
         title: 'Access Denied',
@@ -276,7 +320,9 @@ app.use((req, res, next) => {
     role: role,
     tenantSlug: req.session.tenantSlug,
   } : null;
-  res.locals.userPermissions = role ? (PERMISSIONS[role] || []) : [];
+  res.locals.userPermissions = req.session.hasOwnProperty('userPermissions')
+    ? req.session.userPermissions
+    : (role ? (LEGACY_BUILTIN_PERMISSIONS[role] || []) : []);
   next();
 });
 
@@ -329,7 +375,14 @@ app.post('/profile/password', requireAuth, async (req, res) => {
     // attribution below.
     const user = await prisma.user.findUnique({
       where: { id: req.session.userId },
-      include: { tenant: true, role: true },
+      // Deep-include rolePermissions so the post-regenerate session can
+      // be re-populated with the user's actual permission codes (see
+      // the parallel comment in POST /login). The captured-from-user
+      // value is then assigned inside the regenerate callback below
+      // (postChangeUserPerms) so the fresh session has the same
+      // permission set as the old one - otherwise password change
+      // would silently lock the user out of every gated route.
+      include: { tenant: true, role: { include: { rolePermissions: { include: { permission: true } } } } },
     });
     if (!user) {
       return res.status(400).render('pages/profile', {
@@ -369,6 +422,15 @@ app.post('/profile/password', requireAuth, async (req, res) => {
     const postChangeTenantSlug = user.tenant ? user.tenant.slug : null;
     const postChangeUserName   = user.fullName;
     const postChangeUserRole   = user.role  ? user.role.name.toUpperCase().replace(/ /g, '_') : null;
+    // Preload the perm codes BEFORE regenerate (same pattern as
+    // postChangeUserRole above) so the fresh session can re-apply
+    // them via req.session.userPermissions. Without this capture, the
+    // user would land on /profile with a session that has userId +
+    // tenantId + userRole but no userPermissions, and can(perm) would
+    // 403 every gated page they visited.
+    const postChangeUserPerms  = user.role && user.role.rolePermissions
+      ? user.role.rolePermissions.map(rp => rp.permission.code)
+      : [];
     // Hash new password, update, and regenerate session for security
     const hash = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
@@ -378,6 +440,7 @@ app.post('/profile/password', requireAuth, async (req, res) => {
       req.session.tenantSlug = postChangeTenantSlug;
       req.session.userName   = postChangeUserName;
       req.session.userRole   = postChangeUserRole;
+      req.session.userPermissions = postChangeUserPerms;
       res.render('pages/profile', {
         title:   'My Profile',
         success: 'Password changed successfully.',
@@ -401,7 +464,10 @@ app.post('/profile/password', requireAuth, async (req, res) => {
 // endpoints below so the UI can never silently succeed (empty chart)
 // OR fail (403 toast) with data the user's role shouldn't see.
 app.get('/', requireAuth, async (req, res) => {
-  if (!(PERMISSIONS[req.session.userRole] || []).includes('dashboard:read')) {
+  const allowed = req.session.hasOwnProperty('userPermissions')
+    ? req.session.userPermissions
+    : (LEGACY_BUILTIN_PERMISSIONS[req.session.userRole] || []);
+  if (!allowed.includes('dashboard:read')) {
     return res.redirect('/assets');
   }
   res.render('pages/index', {

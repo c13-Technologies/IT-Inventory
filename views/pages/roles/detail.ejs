@@ -111,10 +111,14 @@
                   <div class="alert alert-info mt-3 mb-0 small d-flex align-items-start">
                     <i class="bx bx-info-circle me-2 mt-1"></i>
                     <div>
-                      The runtime permission gate in <code>server.js</code> is currently hardcoded to the 4
-                      built-in roles. Custom roles are persisted and visible here but won't unlock pages until
-                      PERMISSIONS is migrated to a DB-driven lookup. Users mapped to a custom role will still
-                      authenticate but currently default to no permissions.
+                      The runtime permission gate reads the user's permission codes from
+                      <code>req.session.userPermissions</code>, preloaded at login from the
+                      <code>role_permissions</code> junction table. The 5 built-in roles
+                      (IT Manager, IT Support, Department Head, Employee, Auditor) are seeded
+                      with the same permission sets the legacy <code>PERMISSIONS</code> const
+                      used, so a fresh seed gives every demo user the same access they had
+                      before the migration. Custom roles created here take effect on the
+                      next login.
                     </div>
                   </div>
                 </div>

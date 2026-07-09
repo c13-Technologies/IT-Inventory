@@ -3,7 +3,7 @@
 // Populates the database with sample data matching views/lib/mockData.js.
 // Run via:  npx prisma db seed
 //
-// Order matters (FK dependencies): tenant → roles → departments → users →
+// Order matters (FK dependencies): tenant → permissions → roles → departments → users →
 // vendors → locations → categories → assets → assignments → maintenance.
 
 const { PrismaClient } = require('@prisma/client');
@@ -14,6 +14,71 @@ const prisma = new PrismaClient();
 // Bcrypt password hash for seed users (all share the same password: "password123")
 const DEFAULT_PASSWORD = 'password123';
 let DEFAULT_PASSWORD_HASH = null; // set in main() after bcrypt is ready
+
+// 13 canonical permission codes — mirror of server.js's PERMISSIONS /
+// LEGACY_BUILTIN_PERMISSIONS const. Drives the Permission rows the seed
+// upserts and the RolePermission junction rows it creates for each
+// builtin role. If you add a new code here, also add it to the matching
+// builtin role's array in BUILTIN_PERMISSIONS below AND to the
+// PERMISSION_GROUPS taxonomy in views/lib/prismaData.js (so the role
+// form's checkbox group renders for it).
+const PERMISSION_CODES = [
+  'assets:read', 'assets:write',
+  'lifecycle:read', 'lifecycle:write',
+  'directory:read', 'directory:write',
+  'inventory:read', 'inventory:write',
+  'admin:read', 'admin:write',
+  'communications:read', 'communications:write',
+  'dashboard:read',
+];
+
+// 5 builtin role -> permission map. Mirrors server.js's
+// LEGACY_BUILTIN_PERMISSIONS (which is the fallback for old sessions
+// that pre-date the DB-driven migration). The seed writes the same set
+// into the role_permissions junction table so the DB-driven can(perm)
+// middleware (which reads req.session.userPermissions preloaded at
+// login) gates correctly for the 5 builtins without a per-route lookup.
+// Custom roles created via /roles/new also end up in this junction
+// table; the per-role permission set is what gates them.
+const BUILTIN_PERMISSIONS = {
+  'IT Manager': [
+    'assets:read', 'assets:write',
+    'lifecycle:read', 'lifecycle:write',
+    'directory:read', 'directory:write',
+    'inventory:read', 'inventory:write',
+    'dashboard:read',
+    'admin:read', 'admin:write',
+    'communications:read', 'communications:write',
+  ],
+  'IT Support': [
+    'assets:read', 'assets:write',
+    'lifecycle:read', 'lifecycle:write',
+    'directory:read',
+    'inventory:read',
+    'dashboard:read',
+    'admin:read',
+    'communications:read',
+  ],
+  'Department Head': [
+    'assets:read',
+    'lifecycle:read',
+    'lifecycle:write',  // promoted so DEPT_HEAD can approve asset requests
+    'directory:read',
+  ],
+  'Employee': [
+    'assets:read',
+    'lifecycle:read',
+  ],
+  'Auditor': [
+    'assets:read',
+    'lifecycle:read',
+    'directory:read',
+    'inventory:read',
+    'admin:read',
+    'communications:read',
+    'dashboard:read',
+  ],
+};
 
 async function cleanSlate() {
   // Delete in reverse-dependency order to respect FK constraints
@@ -51,6 +116,21 @@ async function main() {
   });
   console.log(`  ✓ Tenant: ${tenant.slug}`);
 
+  // ── 2. Permissions (13 canonical codes) ────────────────────────
+  // Upsert by `code` so re-running the seed doesn't duplicate rows
+  // and doesn't break existing RolePermission FKs. The id is stable
+  // across re-seeds.
+  const permsByCode = {};
+  for (const code of PERMISSION_CODES) {
+    const p = await prisma.permission.upsert({
+      where:  { code },
+      update: { description: `Permission: ${code}` },
+      create: { code, description: `Permission: ${code}` },
+    });
+    permsByCode[code] = p;
+  }
+  console.log(`  ✓ Permissions: ${PERMISSION_CODES.length}`);
+
   // ── 2. Roles ───────────────────────────────────────────────────
   const roleData = [
     { name: 'IT Manager',       description: 'Full access to all inventory and admin functions' },
@@ -67,6 +147,19 @@ async function main() {
     // Store by a key matching the mock data role strings
     const key = r.name.toUpperCase().replace(/ /g, '_');
     roles[key] = role;
+    // Link the role's permission set via the role_permissions junction
+    // so the DB-driven can(perm) middleware can gate correctly. Without
+    // this, a fresh seed would have Role rows but no RolePermission
+    // rows, and every can(perm) check would resolve to an empty array
+    // (silent lockout for every user). createMany is safe here because
+    // cleanSlate() just deleted all the old junction rows via
+    // prisma.role.deleteMany.
+    const codes = BUILTIN_PERMISSIONS[r.name] || [];
+    if (codes.length) {
+      await prisma.rolePermission.createMany({
+        data: codes.map(code => ({ roleId: role.id, permissionId: permsByCode[code].id })),
+      });
+    }
   }
   console.log(`  ✓ Roles: ${Object.keys(roles).length}`);
 
