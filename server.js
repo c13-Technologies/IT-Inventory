@@ -1299,10 +1299,50 @@ for (const slug of Object.keys(CRUD_SLUG_TO_NAME)) {
   });
 }
 
-app.use(express.static(ROOT_DIR, {
-  index: false,      // '/' is handled by the explicit route above
-  extensions: false,  // don't auto-resolve /foo → /foo.html
-}));
+// ----------------------------------------------------------------------
+// Static assets — locked-down allowlist.
+// Previously this was `app.use(express.static(ROOT_DIR, ...))` which
+// served the WHOLE project root. That leaked:
+//   - /prisma/schema.prisma + /prisma/seed.js (the seed contains bcrypt
+//     hashes of every demo account's password — credential disclosure)
+//   - /server.js (full Express routing code)
+//   - /views/lib/*.js (e.g. prismaData.js — exposes DB query patterns
+//     and DB role names like 'c13-tech', so an attacker could fingerprint
+//     staging/prod internals)
+//   - /package.json + /package-lock.json (deps + start scripts)
+//   - /tmp/, /ref/, /scripts/ (working + reference HTML)
+//   - any future file dropped into the project root that nobody hand-
+//     denied.
+// New policy:
+//   1. Explicit denylist enforced FIRST — belt-and-suspenders so even if
+//      someone widens the static list later, these paths cannot leak.
+//   2. Three explicit allowlisted mounts only — /assets, the local
+//      mirror of /fonts.googleapis.com/css2, and /fonts.gstatic.com/*
+//      IBM Plex Sans WOFF2. Anything else falls through to the 404.
+// ----------------------------------------------------------------------
+
+// Defense-in-depth denylist. The mounts below already exclude these paths,
+// but an explicit regex stops a future maintainer from re-exposing source
+// / secrets by mistake.
+const STATIC_DENYLIST = /^\/(?:prisma|views|scripts|server\.js|package\.json|package-lock\.json|\.env|tmp|ref)(?:\/.*)?$/i;
+app.use((req, res, next) => {
+  if (STATIC_DENYLIST.test(req.path)) {
+    // Return a plain 404 (not 403) so unauthenticated probing doesn't
+    // confirm the URL exists.
+    return res.status(404).end();
+  }
+  next();
+});
+
+// Explicit allowlist — the ONLY paths static middleware will serve.
+//   /assets/*                 — CSS, JS, fonts, images used by the UI
+//   /fonts.googleapis.com/*   — local mirror of the Google Fonts stylesheet
+//   /fonts.gstatic.com/*      — local mirror of the IBM Plex Sans WOFF2
+// Anything outside these prefixes is a 404 → falls through to the final
+// 404 handler below.
+app.use('/assets',             express.static(path.join(ROOT_DIR, 'assets'),             { index: false, extensions: false }));
+app.use('/fonts.googleapis.com', express.static(path.join(ROOT_DIR, 'fonts.googleapis.com'), { index: false, extensions: false }));
+app.use('/fonts.gstatic.com',  express.static(path.join(ROOT_DIR, 'fonts.gstatic.com'),  { index: false, extensions: false }));
 
 // Final fallback: render the 404 EJS view with a 404 status.
 app.use((_req, res) => {
