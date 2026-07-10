@@ -738,6 +738,131 @@ async function getAffectedUsers(roleId) {
   return { role, users };
 }
 
+// Perm-bumps COLUMN MAP for the streaming /api/perm-bumps/export.csv
+// endpoint on /perm-bumps. Exported (not inlined in server.js) so the
+// verifier pulls the same column order + label + accessor the live
+// route does. Snake_case for the spreadsheet-friendly labels; the
+// per-column accessor reads the appropriate denormalized field off
+// the raw audit row (NOT the prepared getPermBumps shape — that's
+// what the on-screen feed renders; here we keep the related JSON
+// spread across "before" / "after" so compliance reviewers can
+// rebuild the original audit-event payload from the raw JSON).
+//
+// The Accessor reads from r.after when present (so roleName /
+// invalidatedCount / affectedUser* all surface even on rows where
+// the after JSON is missing — those cells come back empty).
+const PERM_BUMPS_EXPORT_COLUMNS = [
+  { label: 'created_at',           get: r => r.createdAt },
+  { label: 'action',               get: r => r.action },
+  { label: 'triggered_by_name',    get: r => r.triggeredByName },
+  { label: 'triggered_by_email',   get: r => r.triggeredByEmail },
+  { label: 'affected_role_name',   get: r => (r.after && r.after.roleName)            || null },
+  { label: 'affected_user_name',   get: r => (r.after && r.after.affectedUserName)   || null },
+  { label: 'affected_user_email',  get: r => (r.after && r.after.affectedUserEmail)  || null },
+  { label: 'invalidated_count',    get: r => (r.after && r.after.invalidatedCount)   || 0 },
+  { label: 'entity_type',          get: r => r.entityType },
+  { label: 'entity_id',            get: r => r.entityId },
+  { label: 'before',               get: r => r.before },
+  { label: 'after',                get: r => r.after  },
+];
+
+// Perm-bumps export query for the streaming /api/perm-bumps/export.csv
+// endpoint on /perm-bumps. Returns the most recent role.update +
+// user.role-change events (NO post-filter — see below) plus the raw
+// before / after JSON, joined with the admin who triggered the event.
+//
+// Differences from getPermBumps (the on-screen feed):
+//   1. NO `invalidatedCount > 0` post-filter. Compliance reviews need
+//      to see EVERY role edit, including those on a brand-new custom
+//      role that invalidated 0 users because no users were attached
+//      at edit time. Without them, an auditor could not answer "show
+//      me every role configuration change last quarter".
+//   2. Returns raw `before` + `after` as the actual JSON objects
+//      (caller JSON.stringifies at serialization time, which lets
+//      the CSV-escape function handle the resulting nested quotes).
+//   3. Higher default limit (1000) for the export vs 50 for the page.
+//      The 1000 is the spec'd maximum; callers can pass smaller.
+//
+// SECURITY: tenant-scoped via tenantId() so a foreign tenant admin's
+// CSV export cannot leak rows from another tenant. No additional
+// gate here — the gate is at the route (admin:read).
+async function getPermBumpsForExport({ limit = 1000 } = {}) {
+  const tid = await tenantId();
+  const rows = await prisma.auditLog.findMany({
+    where: {
+      tenantId: tid,
+      action: { in: ['role.update', 'user.role-change'] },
+    },
+    include: { user: true },
+    orderBy: { createdAt: 'desc' },
+    // Fetch up to `limit`; not over-fetched (export vs page): one
+    // findMany with `take: limit` is sufficient because we DO NOT
+    // post-filter (page filters out `invalidatedCount: 0` rows).
+    take: limit,
+  });
+  // Return raw rows including before + after JSON. The route layer
+  // is responsible for the CSV serialization + RFC 4180 escape so the
+  // streaming write-back can be kept dumb (one row in, one CSV line
+  // out).
+  return rows.map(r => ({
+    id:               r.id,
+    createdAt:        r.createdAt,
+    action:           r.action,
+    entityType:       r.entityType,
+    entityId:         r.entityId,
+    triggeredByName:  r.user ? r.user.fullName : 'System',
+    triggeredByEmail: r.user ? r.user.email : null,
+    // The `after` and `before` columns are JSON-typed in Postgres
+    // (Prisma returns them as JS objects). The route will JSON.stringify
+    // before CSV-escaping so a nested JSON value with internal quotes
+    // gets the RFC 4180 double-double-quote treatment (e.g. a key like
+    // `{"qux": "a\"b"}` → ...,"{\"qux\":\"a\"\"b\"}",...).
+    before:           r.before,
+    after:            r.after,
+  }));
+}
+
+// CSV escape (RFC 4180). Exported so the verifier can round-trip
+// tricky inputs (JSON containing internal quotes / commas / CR-LF)
+// through the same function the route uses.
+// Behavior:
+//   - null / undefined → empty string (the canonical CSV "missing
+//     field" representation; tools like Excel + pandas interpret
+//     trailing commas as null).
+//   - Date → ISO string via toISOString() FIRST (before the object-
+//     stringify branch) so the resulting plain string doesn't get
+//     surrounded by literal JSON quotes (JSON.stringify(new Date())
+//     returns '"2026-07-10T14:32:08.123Z"' — which would then get
+//     wrapped + inner-`"` doubled by the escape, producing
+//     `"""2026-07-10T14:32:08.123Z"""` and an awkward Excel parse).
+//   - other objects (Prisma JSON columns come back as JS objects or
+//     null) → JSON.stringify for a stable string representation.
+//   - otherwise → String(value).
+//   - If the resulting string contains `"`, `,`, `\n`, or `\r`,
+//     wrap in `"..."` and double any internal `"` to `""` per
+//     RFC 4180 §2.5/2.6/2.7.
+//   - Strings WITHOUT those special chars are emitted bare (no
+//     unnecessary quoting — keeps the CSV compact + readable).
+function csvEscape(value) {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) {
+    // Recurse with the ISO string — the recursive call handles the
+    // escape logic so we don't duplicate the regex + wrapping here.
+    return csvEscape(value.toISOString());
+  }
+  if (typeof value === 'object') {
+    // Prisma JSON columns come back as objects or null. JSON.stringify
+    // gives RFC 8259; special chars inside following values are handled
+    // by the recursive call's escape pass.
+    return csvEscape(JSON.stringify(value));
+  }
+  const s = String(value);
+  if (/[",\n\r]/.test(s)) {
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  return s;
+}
+
 // Notifications
 async function getNotifications() {
   const tid = await tenantId();
@@ -1017,7 +1142,14 @@ module.exports = Object.assign({}, crudExports, {
   getRoles,
   getAuditLogs,
   getPermBumps,
+  getPermBumpsForExport,
+  // CSV-export column map (exposed so the route AND the verifier
+  // share one source of truth for column order + label + accessor.
+  // Renaming a column here is a one-line edit; both the live export
+  // and the round-trip test pick it up automatically).
+  PERM_BUMPS_EXPORT_COLUMNS,
   getAffectedUsers,
+  csvEscape,
   getReports,
   getNotifications,
   getWebhooks,
