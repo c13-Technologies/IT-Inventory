@@ -1189,6 +1189,29 @@ app.get('/perm-bumps', requireAuth, can('admin:read'), async (req, res) => {
   });
 });
 
+// GET /api/perm-bumps/:id/affected-users
+// Drill-down endpoint for the /perm-bumps modal. :id is the roleId
+// (from the audit row's entityId for role.update events). Returns
+// the role + the current user list mapped to it (fullName, email,
+// lastLoginAt, permVersion). Backs views/pages/perm-bumps/index.ejs.
+//
+// Tenant-scoped via prismaData.getAffectedUsers — a foreign-tenant
+// roleId returns 404 (not 403) so an admin probing cuids cannot
+// distinguish "this roleId belongs to another tenant" from
+// "this roleId does not exist". Express's standard 404 fallback
+// renders the existing 404 page; we emit a JSON 404 because the
+// caller is a fetch() call that expects a structured response.
+app.get('/api/perm-bumps/:id/affected-users', requireAuth, can('admin:read'), async (req, res) => {
+  try {
+    const result = await prismaData.getAffectedUsers(req.params.id);
+    if (!result) return res.status(404).json({ error: 'Role not found.' });
+    res.json(result);
+  } catch (err) {
+    console.error('Failed to load affected users for perm-bump', req.params.id + ':', err.message);
+    res.status(500).json({ error: 'Failed to load affected users.' });
+  }
+});
+
 app.get('/reports', requireAuth, can('admin:read'), async (req, res) => {
   let rows = prismaData.getReports();
   const search = req.query.search || '';

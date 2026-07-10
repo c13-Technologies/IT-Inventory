@@ -91,6 +91,14 @@
                                 <span class="badge bg-warning text-dark fs-6">
                                   <i class="bx bx-user-x me-1"></i><%= r.invalidatedCount %>
                                 </span>
+                                <% if (r.action === 'role.update') { %>
+                                  <button type="button" class="btn btn-outline-light btn-sm px-3 py-2 ms-2 affected-users-link"
+                                          data-role-id="<%= r.entityId %>"
+                                          title="View users currently mapped to <%= r.roleName || ('role ' + r.entityId) %>"
+                                          aria-label="View <%= r.invalidatedCount %> affected user<%= r.invalidatedCount === 1 ? '' : 's' %> for role <%= r.roleName || ('role ' + r.entityId) %>">
+                                    <i class="bx bx-link-external text-muted" aria-hidden="true"></i>
+                                  </button>
+                                <% } %>
                               </td>
                             </tr>
                           <% }); %>
@@ -109,5 +117,149 @@
     </div>
   </div>
   <%- include('../../partials/scripts', { pageScripts: [] }) %>
+
+  <!-- Drill-down modal: shows users currently mapped to a role (clicked from a role.update row on /perm-bumps) -->
+  <div class="modal fade" id="affectedUsersModal" tabindex="-1" aria-labelledby="affectedUsersModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="affectedUsersModalLabel">Affected Users</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="affectedUsersModalBody">
+          <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+            <div class="text-muted small mt-2">Loading affected users…</div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Vanilla-JS (no jQuery needed) click handler for the role.update
+    // rows on /perm-bumps. Pulls the role's currently-mapped user list
+    // from /api/perm-bumps/:id/affected-users and renders a table in
+    // the Bootstrap modal. Created fresh per page load so a server-
+    // side template swap can't leave stale listeners around.
+    (function () {
+      // Defensive guard: partials/scripts.ejs loads the Bootstrap JS bundle
+      // which exposes `bootstrap.Modal` globally. If a future build config
+      // accidentally strips that, the IIFE crashes silently and the page
+      // is left with no working drill-down — unchanged behavior except
+      // for the absence of a console error and the click handlers below
+      // (which would all no-op). Same-tenant rows still render; only the
+      // modal layer degrades.
+      if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+        console.warn('Bootstrap Modal JS not loaded; /perm-bumps drill-down disabled.');
+        return;
+      }
+      var modalEl = document.getElementById('affectedUsersModal');
+      var bodyEl = document.getElementById('affectedUsersModalBody');
+      var titleEl = document.getElementById('affectedUsersModalLabel');
+      if (!modalEl || !bodyEl || !titleEl) return;
+      // Bootstrap 5 global. getOrCreateInstance avoids a "modal already
+      // initialised" error on the second click after a previous open/close.
+      var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+
+      function escapeHtml(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+      }
+
+      function showLoading() {
+        titleEl.textContent = 'Affected Users';
+        bodyEl.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status" aria-hidden="true"></div><div class="text-muted small mt-2">Loading affected users…</div></div>';
+      }
+
+      function showError(msg, hint) {
+        titleEl.textContent = 'Affected Users';
+        // Surface both the server-supplied error (e.g. "Role not found.")
+        // and a short refresh hint when present so the admin has a path
+        // forward without having to read the source code. Hints are
+        // escapeHtml'd for defense-in-depth even though they're not
+        // user-controlled today — if a future caller passes hint text
+        // derived from a user-controlled field this still renders safely.
+        bodyEl.innerHTML =
+          '<div class="alert alert-danger mb-0" role="alert">' +
+            '<div class="fw-semibold mb-1">' + escapeHtml(msg) + '</div>' +
+            (hint ? '<div class="small">' + escapeHtml(hint) + '</div>' : '') +
+          '</div>';
+      }
+
+      function renderUsers(role, users) {
+        var invalidatedHint = '';
+        titleEl.textContent = 'Users in role ' + role.name;
+        if (!users.length) {
+          bodyEl.innerHTML = '<div class="text-center text-muted py-4"><i class="bx bx-user-x" style="font-size:2rem"></i><div class="mt-2">No users are currently mapped to this role.</div></div>';
+          return;
+        }
+        var rows = users.map(function (u) {
+          var lastLogin = u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString() : '<span class="text-muted">Never</span>';
+          return '<tr>' +
+            '<td>' + escapeHtml(u.fullName) + '</td>' +
+            '<td><code class="small">' + escapeHtml(u.email) + '</code></td>' +
+            '<td>' + lastLogin + '</td>' +
+            '<td><span class="badge bg-light text-dark">' + escapeHtml(u.permVersion) + '</span></td>' +
+            '</tr>';
+        }).join('');
+        bodyEl.innerHTML =
+          '<p class="text-muted small mb-3">' +
+            'Showing the <strong>current</strong> set of users mapped to this role (' + users.length + ').' +
+            ' The invalidated count from the original audit event may differ if users were reassigned since.' +
+            ' <code>permVersion</code> reflects each user\'s latest counter at fetch time — equal values across users mean none has been bumped since the last role edit.' +
+          '</p>' +
+          '<div class="table-responsive">' +
+            '<table class="table table-sm table-nowrap align-middle mb-0">' +
+              '<thead class="table-light">' +
+                '<tr><th>Name</th><th>Email</th><th>Last login</th><th>permVersion</th></tr>' +
+              '</thead>' +
+              '<tbody>' + rows + '</tbody>' +
+            '</table>' +
+          '</div>';
+      }
+
+      function handleClick(ev) {
+        var row = ev.target.closest('.affected-users-link');
+        if (!row) return;
+        var roleId = row.getAttribute('data-role-id');
+        if (!roleId) return;
+        showLoading();
+        modal.show();
+        fetch('/api/perm-bumps/' + encodeURIComponent(roleId) + '/affected-users', { credentials: 'same-origin' })
+          .then(function (resp) {
+            if (resp.status === 404) {
+              // 404 is the anti-probing response for either a real
+              // missing role OR a cross-tenant role (same shape). Either
+              // way, a refresh of /perm-bumps is the right next step:
+              // the user list may also be stale relative to recent
+              // reassignments, so we hint a refresh in the error body.
+              throw Object.assign(new Error('Role not found.'), { hint: 'This role may have been deleted since the page loaded — refresh /perm-bumps to see the current state.' });
+            }
+            if (!resp.ok) {
+              return resp.json().then(function (j) { throw new Error(j.error || ('HTTP ' + resp.status)); }).catch(function () { throw new Error('HTTP ' + resp.status); });
+            }
+            return resp.json();
+          })
+          .then(function (data) { renderUsers(data.role, data.users); })
+          .catch(function (err) { showError(err.message, err.hint); });
+      }
+
+      // Click + keyboard activation (Enter/Space) on the role.update rows.
+      document.addEventListener('click', handleClick);
+      document.addEventListener('keydown', function (ev) {
+        if (ev.key !== 'Enter' && ev.key !== ' ') return;
+        var row = ev.target.closest && ev.target.closest('.affected-users-link');
+        if (!row) return;
+        ev.preventDefault();
+        handleClick({ target: row });
+      });
+    })();
+  </script>
 </body>
 </html>

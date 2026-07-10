@@ -703,6 +703,41 @@ async function getPermBumps({ limit = 50 } = {}) {
     }));
 }
 
+// Affected-users lookup for the /perm-bumps drill-down modal.
+// Given a roleId (from the audit row's entityId for role.update events),
+// returns:
+//   - role: { id, name }            (so the modal can show which role)
+//   - users: [{ id, fullName, email, lastLoginAt, permVersion }, ...]
+//     sorted alphabetically by fullName.
+//
+// SECURITY: tenant-scoped findFirst on the role so a user in tenant A
+// cannot probe or list users from a foreign tenant's role by guessing
+// the cuid. The subsequent user.findMany is also tenant-scoped via the
+// same tid (NOT just roleId), so a returning-findFirst pattern is
+// unnecessary — the (roleId, tenantId) compound predicate on User
+// already enforces tenant isolation when combined with the role check.
+//
+// IMPORTANT: this returns the CURRENT set of users mapped to the role.
+// The audit row's invalidatedCount captured the count at edit-time,
+// so the two numbers may diverge if users have been reassigned away
+// from (or into) the role since the bump event was recorded. The
+// modal UI surfaces this distinction (see the "as of now" note
+// rendered in views/pages/perm-bumps/index.ejs).
+async function getAffectedUsers(roleId) {
+  const tid = await tenantId();
+  const role = await prisma.role.findFirst({
+    where: { id: roleId, tenantId: tid },
+    select: { id: true, name: true },
+  });
+  if (!role) return null;
+  const users = await prisma.user.findMany({
+    where: { roleId: roleId, tenantId: tid },
+    select: { id: true, fullName: true, email: true, lastLoginAt: true, permVersion: true },
+    orderBy: { fullName: 'asc' },
+  });
+  return { role, users };
+}
+
 // Notifications
 async function getNotifications() {
   const tid = await tenantId();
@@ -982,6 +1017,7 @@ module.exports = Object.assign({}, crudExports, {
   getRoles,
   getAuditLogs,
   getPermBumps,
+  getAffectedUsers,
   getReports,
   getNotifications,
   getWebhooks,
