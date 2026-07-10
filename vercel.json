@@ -1,5 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install",
   "buildCommand": "npx prisma generate",
-  "installCommand": "npm install"
+  "regions": ["iad1"],
+  "functions": {
+    "**/*.js": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  }
 }
