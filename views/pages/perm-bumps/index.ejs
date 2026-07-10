@@ -92,11 +92,12 @@
                                   <i class="bx bx-user-x me-1"></i><%= r.invalidatedCount %>
                                 </span>
                                 <% if (r.action === 'role.update') { %>
-                                  <button type="button" class="btn btn-outline-light btn-sm px-3 py-2 ms-2 affected-users-link"
+                                  <button type="button" class="btn btn-outline-secondary btn-sm px-3 py-2 ms-2 affected-users-link"
+                                          style="min-width: 44px; min-height: 44px;"
                                           data-role-id="<%= r.entityId %>"
                                           title="View users currently mapped to <%= r.roleName || ('role ' + r.entityId) %>"
                                           aria-label="View <%= r.invalidatedCount %> affected user<%= r.invalidatedCount === 1 ? '' : 's' %> for role <%= r.roleName || ('role ' + r.entityId) %>">
-                                    <i class="bx bx-link-external text-muted" aria-hidden="true"></i>
+                                    <i class="bx bx-link-external" aria-hidden="true"></i>
                                   </button>
                                 <% } %>
                               </td>
