@@ -1294,9 +1294,15 @@ app.get('/api/perm-bumps/export.csv', requireAuth, can('admin:read'), async (req
     // after streaming) so a cancelled download still leaves a trace.
     // Without this, a client cancelling mid-export would silently
     // bypass the audit trail — compliance would have no record of
-    // who tried to pull what. The rowCount/limit/filename in `after`
-    // makes the row useful for offline cross-referencing.
-    prismaData.auditLog('perm-bumps.export', 'perm-bumps', null, null, { rowCount: rows.length, limit: PERM_BUMPS_EXPORT_LIMIT, filename: filename });
+    // who tried to pull what. The rowCount/limit in `after` makes
+    // the row useful for offline cross-referencing, and pass the
+    // filename as the audit entityId (not null) so a SQL lookup
+    // can pull every action against a specific downloaded file:
+    // `SELECT * FROM audit_log WHERE entity_id = 'perm-bumps-2026-...csv'`.
+    // AuditLog.entityId is non-nullable String in the schema so
+    // passing null would silently coerce to empty string — using
+    // the filename keeps the row a direct pointer.
+    prismaData.auditLog('perm-bumps.export', 'perm-bumps', filename, null, { rowCount: rows.length, limit: PERM_BUMPS_EXPORT_LIMIT });
     // Stream rows with backpressure handling. One CSV line per row,
     // emitted via res.write. The await-on-drain pattern caps
     // in-process memory at Node's TCP send-buffer size (~16KB) even
