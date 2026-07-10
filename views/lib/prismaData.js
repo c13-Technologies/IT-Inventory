@@ -738,19 +738,38 @@ async function getAffectedUsers(roleId) {
   return { role, users };
 }
 
-// Perm-bumps COLUMN MAP for the streaming /api/perm-bumps/export.csv
-// endpoint on /perm-bumps. Exported (not inlined in server.js) so the
-// verifier pulls the same column order + label + accessor the live
-// route does. Snake_case for the spreadsheet-friendly labels; the
-// per-column accessor reads the appropriate denormalized field off
-// the raw audit row (NOT the prepared getPermBumps shape — that's
-// what the on-screen feed renders; here we keep the related JSON
-// spread across "before" / "after" so compliance reviewers can
-// rebuild the original audit-event payload from the raw JSON).
+// CSV-export column maps, keyed by the view's URL slug. Each value is
+// the ordered array of `{ label, get }` columns that the streaming
+// export endpoint serializes + writes to the response. Live route
+// AND verifier pull from this map so renaming a column = one edit
+// here. To add a new export surface (e.g. '/assets/export.csv'):
+//   1. Define a new const ARRAY_OF_COLUMNS in this file.
+//   2. Add `'your-slug': YOUR_ARRAY` to CSV_COLUMNS_BY_VIEW below.
+//   3. In server.js: declare the limit + wire a thin route that
+//      fetches rows + calls streamCsvExport({ filePrefix, columns,
+//      rows, limit, auditAction, auditEntityType }).
+// No other code needs to change.
 //
-// The Accessor reads from r.after when present (so roleName /
-// invalidatedCount / affectedUser* all surface even on rows where
-// the after JSON is missing — those cells come back empty).
+// Snake_case labels (spreadsheet-friendly). Per-column accessor reads
+// the denormalized field off the row object that the matching
+// getXxxForExport() function returns (NOT the on-screen feed's
+// view shape — here we keep the related JSON spread across
+// "before" / "after" so compliance reviewers can rebuild the
+// original audit-event payload from the raw JSON).
+//
+// Perm-bumps columns mirror the on-screen table PLUS the raw before
+// / after JSON. Accessor reads from r.after when present (so
+// roleName / invalidatedCount / affectedUser* all surface even on
+// rows where the after JSON is missing — those cells come back
+// empty).
+//
+// Audit-log columns are intentionally minimal — no perm-bumps-only
+// fields like `affected_role_name` / `invalidated_count`, since
+// those would be empty for non-perm-bump rows. We DO include `ip`
+// and `user_agent` because /audit-log is the compliance catch-all
+// (the two fields that distinguish manual admin actions from
+// automated ones — useful when reconstructing an incident
+// timeline).
 const PERM_BUMPS_EXPORT_COLUMNS = [
   { label: 'created_at',           get: r => r.createdAt },
   { label: 'action',               get: r => r.action },
@@ -765,6 +784,35 @@ const PERM_BUMPS_EXPORT_COLUMNS = [
   { label: 'before',               get: r => r.before },
   { label: 'after',                get: r => r.after  },
 ];
+
+const AUDIT_LOG_EXPORT_COLUMNS = [
+  { label: 'created_at',  get: r => r.createdAt },
+  { label: 'user_name',   get: r => r.userName },
+  { label: 'user_email',  get: r => r.userEmail },
+  { label: 'action',      get: r => r.action },
+  { label: 'entity_type', get: r => r.entityType },
+  { label: 'entity_id',   get: r => r.entityId },
+  { label: 'ip',          get: r => r.ip },
+  { label: 'user_agent',  get: r => r.userAgent },
+  { label: 'before',      get: r => r.before },
+  { label: 'after',       get: r => r.after  },
+];
+
+// Single source of truth keyed by view slug. Each value is an
+// ALIAS BY REFERENCE, NOT a copy — `'perm-bumps'` and
+// PERM_BUMPS_EXPORT_COLUMNS point at the same Array. rename a
+// column = one edit at the const, both consumers pick it up.
+//
+// IMPORTANT — DO NOT MUTATE. Calling `CSV_COLUMNS_BY_VIEW[k].push(x)`
+// or `CVS_COLUMNS_BY_VIEW[k].splice(...)` would mutate the dedicated
+// const simultaneously (they're the same Array). Treat these as
+// read-only. To add a new export surface: define a new
+// `*_EXPORT_COLUMNS` const above, add a key here, then add a thin
+// route thunk in server.js that calls streamCsvExport().
+const CSV_COLUMNS_BY_VIEW = {
+  'perm-bumps': PERM_BUMPS_EXPORT_COLUMNS,
+  'audit-log':  AUDIT_LOG_EXPORT_COLUMNS,
+};
 
 // Perm-bumps export query for the streaming /api/perm-bumps/export.csv
 // endpoint on /perm-bumps. Returns the most recent role.update +
@@ -819,6 +867,61 @@ async function getPermBumpsForExport({ limit = 1000 } = {}) {
     // `{"qux": "a\"b"}` → ...,"{\"qux\":\"a\"\"b\"}",...).
     before:           r.before,
     after:            r.after,
+  }));
+}
+
+// Audit-log export query for the streaming /api/audit-log/export.csv
+// endpoint on /audit-log. Returns the most recent tenant-scoped rows
+// from the audit log + the raw before / after JSON + the user join
+// (fullName + email denormalized) + ip + userAgent so a compliance
+// reviewer can identify the source.
+//
+// Differences from getAuditLogs (the on-screen feed): NO client-side
+// post-filter — every audit row is included (the page's search
+// filtering happens in server.js AFTER the DB fetch, so the export
+// matches the DB state, not the user's current search). Defaults to
+// a higher limit (5000) than perm-bumps (1000) because /audit-log is
+// the catch-all compliance view ("last quarter's activity" can be
+// many more rows than recent permission bumps). 5000 still streams
+// cleanly through Node's TCP send buffer (~16KB chunks).
+//
+// SECURITY: tenant-scoped via tenantId() so a foreign tenant admin's
+// CSV export cannot leak rows from another tenant. No additional
+// gate here — the gate is at the route (admin:read).
+async function getAuditLogsForExport({ limit = 5000 } = {}) {
+  const tid = await tenantId();
+  const rows = await prisma.auditLog.findMany({
+    where: { tenantId: tid },
+    include: { user: true },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+  return rows.map(r => ({
+    id:        r.id,
+    createdAt: r.createdAt,
+    // The audit row's `userId` field is the session userId (the admin
+    // doing the action). We denormalize user.fullName + user.email
+    // here so the CSV has the same shape the on-screen /audit-log
+    // page does NOT (it only renders userName). Including email
+    // here gives compliance a way to map audit events back to a
+    // specific person when a fullName collides with another user's
+    // (e.g. two "John Smith"s).
+    userName:  r.user ? r.user.fullName : 'System',
+    userEmail: r.user ? r.user.email : null,
+    action:    r.action,
+    entityType: r.entityType,
+    entityId:   r.entityId,
+    // ip + userAgent are the two request-context fields the
+    // auditLog() helper writes (server.js's loginGuard + every
+    // CRUD POST captures them). Useful when reconstructing "was
+    // this action taken from a recognised office IP or a hotel
+    // WiFi while the laptop was on holiday?".
+    ip:        r.ip,
+    userAgent: r.userAgent,
+    // Raw JSON columns — same shape the audit page renders as the
+    // expandable JSON blob.
+    before:    r.before,
+    after:     r.after,
   }));
 }
 
@@ -1143,11 +1246,16 @@ module.exports = Object.assign({}, crudExports, {
   getAuditLogs,
   getPermBumps,
   getPermBumpsForExport,
-  // CSV-export column map (exposed so the route AND the verifier
+  // CSV-export column maps (exposed so the route AND the verifier
   // share one source of truth for column order + label + accessor.
-  // Renaming a column here is a one-line edit; both the live export
-  // and the round-trip test pick it up automatically).
+  // Renaming a column is a one-line edit; both the live export and
+  // the round-trip test pick it up automatically. Adding a new
+  // export surface = define a new *_EXPORT_COLUMNS const + register
+  // it in CSV_COLUMNS_BY_VIEW + wire a thin route in server.js.
   PERM_BUMPS_EXPORT_COLUMNS,
+  AUDIT_LOG_EXPORT_COLUMNS,
+  CSV_COLUMNS_BY_VIEW,
+  getAuditLogsForExport,
   getAffectedUsers,
   csvEscape,
   getReports,

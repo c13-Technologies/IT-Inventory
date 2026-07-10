@@ -1212,55 +1212,66 @@ app.get('/api/perm-bumps/:id/affected-users', requireAuth, can('admin:read'), as
   }
 });
 
-// GET /api/perm-bumps/export.csv
-// Streaming CSV export of the last 1,000 role.update + user.role-change
-// audit events. Powers the Export button on /perm-bumps. Backs
-// GET /perm-bumps (compliance reviews: "give me everything from last
-// quarter"). Gate shape mirrors the page (requireAuth + admin:read);
-// tenant isolation is enforced inside prismaData.getPermBumpsForExport
-// (tenantId() returns the session tenant; foreign-tenant rows are
-// excluded at the SQL WHERE clause, so a cross-tenant export is
-// structurally impossible without impersonating a session).
+// ---------------------------------------------------------------------------
+// Generic CSV-streaming helper for the /api/<view>/export.csv routes
+// (/perm-bumps, /audit-log, and any future export surface). Extracted
+// from /api/perm-bumps/export.csv so a new export endpoint is a thin
+// route thunk rather than a 50-line copy. The route MUST pass already-
+// fetched rows; this helper is RESPONSIBLE for:
+//   - setting the 4 stream-handshake headers (Content-Type,
+//     Content-Disposition, Cache-Control, X-Content-Type-Options),
+//   - writing the column-label header row + LF terminator,
+//   - emitting every data row with TCP backpressure handling,
+//   - abort detection (res.once('close') sets aborted=true; the
+//     drain await also resolves on close so a cancelled download
+//     never hangs the request forever),
+//   - falling back to a `# EXPORT_FAILED: <msg>` trailing line
+//     if a streaming exception escapes.
+// The caller IS responsible for:
+//   - the DB fetch + the audit log write (the route runs `auditLog`
+//     AFTER the fetch succeeds but BEFORE the streaming loop, so a
+//     cancelled download still leaves an audit trace),
+//   - the route's auth + perm gate (requireAuth + can(...)). Each
+//     thin route thunk still wires its own gate; this helper doesn't
+//     know about RBAC.
 //
 // STREAMING NOTES: Node's `res.write` returns false when the OS send
-// buffer is full (TCP backpressure). The handler awaits a single
-// `res.once('drain', resolve)` event before continuing, so a slow
-// client doesn't accumulate unbounded buffered chunks in the Node
-// process. The whole export keeps resident memory bounded by
-// res.write's buffer size (default ~16KB) regardless of how many
-// rows the DB returns.
+// buffer is full (TCP backpressure). The handler awaits `drain OR
+// close` before continuing, so a slow client doesn't accumulate
+// unbounded buffered chunks in the Node process. The whole export
+// keeps resident memory bounded by res.write's buffer size (default
+// ~16KB) regardless of how many rows the DB returned.
+//
 // HEADERS-SET-FIRST: Content-Type + Content-Disposition + Cache-Control
-// MUST be flushed via res.setHeader BEFORE res.write is called; once
-// the first byte goes out, those become immutable. The constant
-// filename prefix matches the rest of the codebase (no spaces, ASCII,
-// the companion filename the browser shows in its download bar).
+// + X-Content-Type-Options MUST be flushed via res.setHeader BEFORE
+// res.write is called; once the first byte goes out, those become
+// immutable. The constant filename uses '-' separators so the name
+// stays Windows / NTFS safe (no colons).
 //
-// Audit policy: we write the export entry RIGHT AFTER the DB fetch
-// succeeds — BEFORE the streaming loop starts — so a partial export
-// (cancelled download, network timeout) STILL leaves an audit trace.
-// Pre-fix the audit row fired after `res.end()` which a cancellation
-// would have skipped; the round-1 reviewer flagged this as a
-// compliance audit gap. The `after.rowCount` field captures the
-// source-of-truth row count so the auditor can cross-reference the
-//   "admin X pulled N rows on date Y"   audit row
-//   "perm-bumps-<stamp>.csv" (filename)  downloaded file
-// pair from the same pull.
+// AUDIT POLICY: the route owner calls prismaData.auditLog(action,
+// entityType, filename, null, { rowCount, limit }) AFTER the fetch
+// but BEFORE calling this helper — so a partial / cancelled download
+// still leaves a trace. The audit row's entityId is the filename, so
+// a SQL lookup can pull every action against a specific downloaded
+// file: `SELECT * FROM audit_log WHERE entity_id = '<file>.csv'`.
+// AuditLog.entityId is non-nullable String in the schema so passing
+// null would silently coerce to empty string — using the filename
+// keeps the row a direct pointer.
 //
-// The column map is defined in views/lib/prismaData.js (exported as
-// `PERM_BUMPS_EXPORT_COLUMNS`) rather than inlined here so the
-// route AND the verifier share a single source of truth — renaming
-// a column is a one-line edit there, both consumers pick it up.
-const PERM_BUMPS_EXPORT_LIMIT = 1000;
-app.get('/api/perm-bumps/export.csv', requireAuth, can('admin:read'), async (req, res) => {
+// To add a new export surface: define a new *_EXPORT_COLUMNS const
+// in views/lib/prismaData.js, register it in prismaData.CSV_COLUMNS_BY_VIEW,
+// then add a thin route thunk like the two below.
+async function streamCsvExport(req, res, opts) {
+  const { filePrefix, columns, rows, limit, auditAction, auditEntityType } = opts;
   // Seconds-precise stamp in the filename for cross-referencing against
   // the audit log (which records the same export event with createdAt
   // at second precision via Postgres NOW()). T replaced with - so the
-  // filename stays filesystem-safe (colons are illegal on Windows
-  // / NTFS). Trailing milliseconds and Z stripped since they add no
-  // value to a compliance file name and annoy some browsers when the
-  // filename has many characters.
+  // filename stays filesystem-safe (colons are illegal on Windows /
+  // NTFS). Trailing milliseconds + Z stripped since they add no value
+  // to a compliance file name and annoy some browsers when the filename
+  // has many characters.
   const stamp = new Date().toISOString().replace(/T/, '-').replace(/:/g, '').replace(/\..+/, '');
-  const filename = 'perm-bumps-' + stamp + '.csv';
+  const filename = filePrefix + '-' + stamp + '.csv';
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
   res.setHeader('Cache-Control', 'no-store');
@@ -1273,46 +1284,52 @@ app.get('/api/perm-bumps/export.csv', requireAuth, can('admin:read'), async (req
   res.setHeader('X-Content-Type-Options', 'nosniff');
   // Header row + LF line terminator (CSV RFC 4180 allows CRLF too;
   // LF is the modern convention + matches what most spreadsheet
-  // tools emit on the way out). The header is one tiny synchronous
-  // write before any I/O — safe because we haven't gone async yet.
-  res.write(prismaData.PERM_BUMPS_EXPORT_COLUMNS.map(function (c) { return prismaData.csvEscape(c.label); }).join(',') + '\n');
+  // tools emit on the way out). One tiny synchronous write before
+  // any I/O — safe because we haven't gone async yet.
+  res.write(columns.map(function (c) { return prismaData.csvEscape(c.label); }).join(',') + '\n');
+  // AUDIT LOG: fires AFTER the route's DB fetch (rows.length is
+  // captured from the real returned set) and BEFORE streaming starts.
+  // Two invariants this satisfies:
+  //   1. A cancelled download still leaves a trace — the fetch
+  //      succeeded (rows is real), the audit row wrote, the client
+  //      cancelled mid-stream. Compliance can see "who tried to pull
+  //      what" even when the response was truncated.
+  //   2. The entityId is the REAL filename (not a placeholder) — the
+  //      filename is computed at the top of this function, so by the
+  //      time we reach this line it's already in `filename`. SQL can
+  //      cross-reference every action against a specific downloaded
+  //      file:
+  //        `SELECT * FROM audit_log WHERE entity_id = 'perm-bumps-2026...csv'`
+  //      AuditLog.entityId is non-nullable String in the schema, so
+  //      passing the filename (a non-empty string) keeps the row a
+  //      direct pointer; passing null would silently coerce to ''.
+  // Centralized here so every export surface (perm-bumps, audit-log,
+  // and any future view) gets the same timing invariant without each
+  // route thunk having to remember it. Move this call OUTSIDE the
+  // helper only if you also have a strong reason to break that
+  // invariant — every live export route in this file relies on it.
+  prismaData.auditLog(auditAction, auditEntityType, filename, null, { rowCount: rows.length, limit });
   // CLIENT-DISCONNECT: a cancelled download closes the socket, but
   // `res.write()` would still return true on a closed TCP connection
   // (it's a successful kernel call to enqueue bytes the OS will then
   // drop). Critically, the `drain` event we listen for under
   // backpressure will NEVER fire on a closed socket, so without the
-  // `close` listener below the row-streaming loop would hand out of
+  // `close` listener below the row-streaming loop would hang out of
   // the `await new Promise(resolve => res.once('drain', resolve))`
-  // and hang forever — holding a Node event-loop slot per cancelled
-  // download from every flaky client. Set `aborted = true` on
-  // socket-close and on every drain wait so the loop short-circuits.
+  // — holding a Node event-loop slot per cancelled download from
+  // every flaky client. Set `aborted = true` on socket-close AND on
+  // the backpressure await so the loop short-circuits on either path.
   let aborted = false;
   res.once('close', function () { aborted = true; });
   try {
-    const rows = await prismaData.getPermBumpsForExport({ limit: PERM_BUMPS_EXPORT_LIMIT });
-    // AUDIT TIMING: write the export row RIGHT AFTER the fetch (not
-    // after streaming) so a cancelled download still leaves a trace.
-    // Without this, a client cancelling mid-export would silently
-    // bypass the audit trail — compliance would have no record of
-    // who tried to pull what. The rowCount/limit in `after` makes
-    // the row useful for offline cross-referencing, and pass the
-    // filename as the audit entityId (not null) so a SQL lookup
-    // can pull every action against a specific downloaded file:
-    // `SELECT * FROM audit_log WHERE entity_id = 'perm-bumps-2026-...csv'`.
-    // AuditLog.entityId is non-nullable String in the schema so
-    // passing null would silently coerce to empty string — using
-    // the filename keeps the row a direct pointer.
-    prismaData.auditLog('perm-bumps.export', 'perm-bumps', filename, null, { rowCount: rows.length, limit: PERM_BUMPS_EXPORT_LIMIT });
-    // Stream rows with backpressure handling. One CSV line per row,
-    // emitted via res.write. The await-on-drain pattern caps
-    // in-process memory at Node's TCP send-buffer size (~16KB) even
-    // when the full result set is huge + the client is slow. resolve
-    // fires on whichever event hits first (drain OR close) so a
-    // cancelled download can still escape the await.
     for (const r of rows) {
       if (aborted) break;
-      const line = prismaData.PERM_BUMPS_EXPORT_COLUMNS.map(function (c) { return prismaData.csvEscape(c.get(r)); }).join(',') + '\n';
+      const line = columns.map(function (c) { return prismaData.csvEscape(c.get(r)); }).join(',') + '\n';
       if (!res.write(line)) {
+        // Whichever event fires first (drain OR close) unblocks
+        // the await — `res.once` auto-removes the first listener
+        // and the second is orphaned (zero leak). A cancelled
+        // download therefore NEVER hangs the route handler.
         await new Promise(function (resolve) {
           res.once('drain', resolve);
           res.once('close', resolve);
@@ -1321,18 +1338,67 @@ app.get('/api/perm-bumps/export.csv', requireAuth, can('admin:read'), async (req
     }
     res.end();
   } catch (err) {
-    // Headers + the header row already went out, so we cannot switch
-    // to an HTML error page here. Best we can do is log + truncate
-    // the (so-far streamed) response so the client sees a truncated
-    // CSV rather than a half-rendered HTML page they have to manually
-    // reject. Appending a CSV-style hash-prefixed row signals to the
-    // spreadsheet tool that the file is incomplete + a downstream
-    // consumer will at least see something visibly anomalous when
-    // they import.
-    console.error('[perm-bumps.export] Export stream failed:', err.message);
+    console.error('[' + auditAction + '] Export stream failed:', err.message);
     try { res.write('# EXPORT_FAILED: ' + String(err.message).replace(/[\r\n,]/g, ' ') + '\n'); } catch (e) {}
     res.end();
   }
+}
+
+// GET /api/perm-bumps/export.csv
+// Streaming CSV export of the last 1,000 role.update + user.role-change
+// audit events. Powers the Export button on /perm-bumps. Backs
+// GET /perm-bumps (compliance reviews: "give me everything from last
+// quarter"). Gate shape mirrors the page (requireAuth + admin:read);
+// tenant isolation is enforced inside prismaData.getPermBumpsForExport
+// (tenantId() returns the session tenant; foreign-tenant rows are
+// excluded at the SQL WHERE clause, so a cross-tenant export is
+// structurally impossible without impersonating a session).
+//
+// ROUTE-SHAPE NOTE: thin thunk — fetch + delegate. The shared
+// streaming logic (set-headers / abort detection / backpressure /
+// audit-timing / error fallback) lives in streamCsvExport above.
+// To add a similar export endpoint, copy this 9-line shape and
+// change the 5 options; the helper takes care of audit writing,
+// header writing, and abort-safe streaming so the route never
+// accidentally drops one of those safety nets.
+const PERM_BUMPS_EXPORT_LIMIT = 1000;
+app.get('/api/perm-bumps/export.csv', requireAuth, can('admin:read'), async (req, res) => {
+  const rows = await prismaData.getPermBumpsForExport({ limit: PERM_BUMPS_EXPORT_LIMIT });
+  await streamCsvExport(req, res, {
+    filePrefix:      'perm-bumps',
+    columns:         prismaData.CSV_COLUMNS_BY_VIEW['perm-bumps'],
+    rows:            rows,
+    limit:           PERM_BUMPS_EXPORT_LIMIT,
+    auditAction:     'perm-bumps.export',
+    auditEntityType: 'perm-bumps',
+  });
+});
+
+// GET /api/audit-log/export.csv
+// Streaming CSV export of the last 5,000 tenant-scoped audit rows.
+// Powers the Export button on /audit-log. Backed by
+// prismaData.getAuditLogsForExport (tenant-scoped via tenantId();
+// includes ip + userAgent + before/after). Higher default limit
+// than /perm-bumps (5,000 vs 1,000) because /audit-log is the
+// compliance catch-all ("give me everything from last quarter" can
+// span many more rows than recent permission bumps).
+//
+// Same gate shape as the page (requireAuth + admin:read). Same
+// aborted-socket + audit-timing + nosniff guarantees as the
+// perm-bumps route, via shared streamCsvExport helper (which
+// writes the audit row AFTER fetch + BEFORE streaming so a
+// cancelled download still leaves a trace).
+const AUDIT_LOG_EXPORT_LIMIT = 5000;
+app.get('/api/audit-log/export.csv', requireAuth, can('admin:read'), async (req, res) => {
+  const rows = await prismaData.getAuditLogsForExport({ limit: AUDIT_LOG_EXPORT_LIMIT });
+  await streamCsvExport(req, res, {
+    filePrefix:      'audit-log',
+    columns:         prismaData.CSV_COLUMNS_BY_VIEW['audit-log'],
+    rows:            rows,
+    limit:           AUDIT_LOG_EXPORT_LIMIT,
+    auditAction:     'audit-log.export',
+    auditEntityType: 'audit-log',
+  });
 });
 
 app.get('/reports', requireAuth, can('admin:read'), async (req, res) => {
